@@ -1,4 +1,3 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -7,10 +6,7 @@ import {
   EjecutorComandosReal,
   existeProceso,
   matarArbolProcesos,
-  VARIABLES_ENTORNO_PERMITIDAS,
 } from "../src/index.js";
-
-const TMP_DIR = join(process.cwd(), ".batuta_test_cmd");
 
 describe("BufferTruncado (CA-3)", () => {
   it("conserva salidas que no superan el límite sin descartar nada", () => {
