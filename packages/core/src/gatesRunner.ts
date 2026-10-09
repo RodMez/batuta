@@ -96,6 +96,7 @@ export async function ejecutarGates(
       timeoutMs: gate.timeout_seg * 1000,
       entornoExtra: opciones?.entornoExtra,
       limiteSalidaBytes: opciones?.limiteSalidaBytes,
+      shell: true,
     });
 
     const pasa = res.codigoSalida === 0 && !res.timeoutVencido;
