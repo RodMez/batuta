@@ -138,3 +138,15 @@ export type {
   OpcionesEjecucionGates,
   ResultadoGate,
 } from "./gatesRunner.js";
+export {
+  coincideRutaProhibida,
+  detectarSecretoEnLinea,
+  evaluarDiff,
+  normalizarRutaDiff,
+} from "./diffPolicy.js";
+export type {
+  CambioArchivo,
+  PoliticaDiff,
+  TipoViolacionDiff,
+  ViolacionDiff,
+} from "./diffPolicy.js";
