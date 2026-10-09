@@ -125,3 +125,16 @@ export type {
   OpcionesEjecucionComando,
   ResultadoComando,
 } from "./commandRunner.js";
+export {
+  crearPayloadGate,
+  ejecutarGates,
+  GateEjecutadoPayloadSchema,
+  InformeGatesSchema,
+  ResultadoGateSchema,
+} from "./gatesRunner.js";
+export type {
+  GateEjecutadoPayload,
+  InformeGates,
+  OpcionesEjecucionGates,
+  ResultadoGate,
+} from "./gatesRunner.js";
