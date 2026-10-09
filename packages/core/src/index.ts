@@ -11,3 +11,55 @@ export function getCoreInfo(): CoreInfo {
     version: CORE_VERSION,
   };
 }
+
+export { AgentInputSchema } from "./agentContract.js";
+export type { AgentInput } from "./agentContract.js";
+export {
+  AgentOutputJsonSchema,
+  AgentOutputSchema,
+  AgentRoleSchema,
+  AgentStatusSchema,
+  AGENT_ROLES,
+  AGENT_STATUSES,
+  parseAgentInput,
+  parseAgentOutput,
+  ReportedCheckSchema,
+} from "./agentContract.js";
+export type {
+  AgentOutput,
+  AgentRole,
+  AgentStatus,
+  ReportedCheck,
+} from "./agentContract.js";
+export {
+  BatutaConfigSchema,
+  loadBatutaConfig,
+  parseBatutaConfig,
+  parseBatutaConfigYaml,
+} from "./config.js";
+export type { BatutaConfig, Gate } from "./config.js";
+export {
+  EVENT_TYPES,
+  EventSchema,
+  EventTypeSchema,
+  parseEvent,
+  parseEventLine,
+  serializeEvent,
+} from "./events.js";
+export type { BatutaEvent, EventType } from "./events.js";
+export {
+  PlanSchema,
+  parsePlan,
+  SubtaskSchema,
+  TaskComplexitySchema,
+  TASK_COMPLEXITIES,
+} from "./plan.js";
+export type { Plan, Subtask, TaskComplexity } from "./plan.js";
+export {
+  RUN_STATUSES,
+  parseRunState,
+  RunStateSchema,
+  RunStatusSchema,
+} from "./state.js";
+export type { RunState, RunStatus } from "./state.js";
+export { formatZodError, stringifyIssuePath } from "./validation.js";
