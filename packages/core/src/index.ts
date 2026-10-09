@@ -113,3 +113,15 @@ export {
 } from "./state.js";
 export type { Puerta, RunState, RunStatus } from "./state.js";
 export { formatZodError, stringifyIssuePath } from "./validation.js";
+export {
+  BufferTruncado,
+  construirEntornoLimpio,
+  EjecutorComandosReal,
+  matarArbolProcesos,
+  VARIABLES_ENTORNO_PERMITIDAS,
+} from "./commandRunner.js";
+export type {
+  EjecutorComandos,
+  OpcionesEjecucionComando,
+  ResultadoComando,
+} from "./commandRunner.js";
