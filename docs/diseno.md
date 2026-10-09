@@ -1,8 +1,8 @@
 # Batuta: sistema orquestador de agentes de IA
 
-> Diseño v0.10 · Plan cerrado, piloto verificado y plan de codificación · 9 de octubre de 2026
+> Diseño v0.12 · Plan cerrado, piloto verificado y plan de codificación · 9 de octubre de 2026
 > Estado: solo planificación. Todavía no hay código ni lenguaje elegido.
-> Las versiones v0.2 a v0.10 incorporan la comparación con ForgeFlow Harness y las decisiones de ejecución, despliegue y avisos (ver el registro de cambios al final).
+> Las versiones v0.2 a v0.12 incorporan la comparación con ForgeFlow Harness y las decisiones de ejecución, despliegue y avisos (ver el registro de cambios al final).
 
 ## 1. Visión
 
@@ -181,6 +181,8 @@ INTAKE → [H0: aprobar presupuesto y límites] → SPEC → [H1: aprobar spec] 
 
 Estados terminales: `DONE`, `FAILED` (límite de intentos o presupuesto), `ABORTED` (cancelada por la persona).
 
+Estados de espera: `WAITING_INPUT` (duda crítica) y `AWAITING_APPROVAL` (espera una puerta humana: H0, H1, H2 o H3; el estado guarda cuál).
+
 **Comandos de la CLI:**
 - `batuta run brief.md`: inicia una ejecución; muestra los límites de presupuesto y pide confirmación (H0).
 - `batuta status [run_id]`: muestra el estado y el último evento.
@@ -202,7 +204,7 @@ Batuta también puede iniciar un proyecto vacío, con estas adaptaciones, porque
 
 1. `batuta init` crea el repositorio con un commit inicial, necesario para que los worktrees tengan una rama de la que partir.
 2. La primera ejecución es **`SPEC-000: fundación del proyecto`**: define el stack, la estructura, los scripts (lint, typecheck, test, build), el `AGENTS.md` y el CI. Sus criterios de aceptación son que el esqueleto compila y los scripts corren.
-3. La aprobación humana en H1 es más exigente en esa primera spec, porque fija la arquitectura. La elección del stack no se delega al agente.
+3. El `architect` toma las decisiones de diseño (stack, estructura y convenciones) y las registra en la spec con sus alternativas. La persona las aprueba o corrige en H1, que es más exigente en esa primera spec porque fija la arquitectura.
 4. Para `SPEC-000` el máximo de preguntas abiertas sube (por ejemplo a 10), porque hay mucha más ambigüedad.
 5. Desde ahí el flujo es el normal: `SPEC-001`, `SPEC-002`, una por funcionalidad.
 
@@ -358,13 +360,9 @@ aprobaciones:
   H1_spec: true
   H2_plan: true
   H3_merge: true
-gates:
-  - formato
-  - lint
-  - build
-  - tests
-  - criterios
-  - politica_diff
+gates:                       # solo gates de comando; la política de diff y los criterios de aceptación los aplica siempre el motor
+  - { nombre: lint,  comando: <completar>, timeout_seg: 60 }
+  - { nombre: tests, comando: <completar>, timeout_seg: 120 }
 politica_comandos:
   bajo: permitir             # lectura, tests, lint
   medio: registrar           # instalar dependencias, editar configuración
@@ -566,13 +564,15 @@ rutas_prohibidas:   # cambiarlas requiere aprobación humana
 
 Batuta se construye con el mismo método que aplicará: cada hito tiene un brief con criterios de aceptación y comandos de verificación, y no se pasa al siguiente hasta que sus gates están en verde.
 
-**Reparto de roles.** Claude planifica el proyecto: mantiene este diseño, la hoja de ruta, los hitos y sus criterios de aceptación. El agente de codificación decide el cómo: estructura del código, patrones, librerías y detalles técnicos. Escribe el código, las pruebas y la documentación técnica, y registra sus decisiones.
+**Reparto de roles.** Mientras se construye Batuta, Claude planifica el proyecto y tiene la autoridad sobre su diseño: mantiene este documento, la hoja de ruta, los hitos y sus criterios de aceptación, y puede dar al agente de codificación pautas, consejos y órdenes concretas sobre el código a generar (estructura, interfaces, nombres, patrones). El agente implementa: escribe el código, las pruebas y la documentación técnica, y decide todo lo que el diseño y las pautas no especifican.
 
-**Límites del agente.** Las decisiones ya tomadas por el usuario (sección 20) son restricciones y no se cambian sin consultarlo. Los criterios de aceptación de cada hito se cumplen siempre. Si el agente cree que el diseño tiene un error o que hay una opción mejor, lo propone en su informe. Puede seguir su propuesta mientras no contradiga una decisión tomada ni un criterio de aceptación, y deja constancia en el registro de decisiones. Claude actualiza el diseño con esas propuestas cuando el usuario se las traslada.
+**Límites del agente.** Lo que fija este diseño, las pautas del planificador y las decisiones del usuario (sección 20) es obligatorio, igual que los criterios de aceptación de cada hito. Lo que no esté especificado lo decide el agente y lo registra en el registro de decisiones. Si el agente discrepa de una pauta, o cree que el diseño tiene un error o que hay una opción mejor, lo dice en su informe y, mientras no se actualice el diseño, sigue lo que este dice. Claude actualiza el diseño con esas propuestas cuando el usuario se las traslada.
+
+**Después de Batuta.** Esta regla es solo para la construcción de Batuta. Cuando Batuta esté terminado y trabaje en otros proyectos, sus agentes toman sus propias decisiones de diseño, que registran y que la persona aprueba o corrige en las puertas humanas (sección 4).
 
 **Orquestación manual hasta que Batuta exista.** El usuario hace de orquestador, con este ciclo por hito:
 
-1. Claude define el hito: objetivo, restricciones y criterios de aceptación, en un brief corto.
+1. Claude define el hito: objetivo, restricciones, criterios de aceptación y, cuando conviene, pautas concretas sobre el código.
 2. El usuario lanza al agente de codificación sobre el brief, en una rama `hito/NN-nombre`.
 3. El agente diseña el detalle (puede escribir su propia spec corta), implementa, ejecuta los gates, registra sus decisiones y entrega un informe.
 4. El usuario revisa con el informe y los gates. Si lo pide, Claude hace una revisión independiente de la rama.
@@ -584,7 +584,7 @@ Los briefs son las órdenes de trabajo del agente y, a la vez, la primera prueba
 
 **Decididas por el usuario (restricciones):** TypeScript, núcleo y CLI delgada, funcionamiento en Windows y Linux, invocación de agentes por CLI headless y el resto de las decisiones de la sección 20.
 
-**Recomendaciones iniciales.** El agente puede cambiarlas si lo justifica en el registro de decisiones:
+**Pautas del planificador.** Se aplican mientras no se actualice el diseño. Si el agente ve una opción mejor, la propone en su informe:
 
 - Módulos ES, Node 22 o superior y `npm workspaces`.
 - Vitest para las pruebas y ESLint para el lint.
@@ -612,7 +612,7 @@ batuta/
 
 ### Hitos
 
-Los hitos fijan el objetivo y el criterio de terminación. El agente puede proponer dividirlos o reordenarlos si lo justifica en el registro de decisiones.
+Los hitos fijan el objetivo y el criterio de terminación. El agente puede proponer dividirlos o reordenarlos en su informe; la decisión es de Claude y del usuario.
 
 | # | Hito | Contenido | Listo cuando |
 |---|---|---|---|
@@ -626,6 +626,11 @@ Los hitos fijan el objetivo y el criterio de terminación. El agente puede propo
 | 7 | CLI | `run`, `status`, `approve`, `resume` y `abort` | Un flujo completo con `FakeRunner` desde la terminal |
 | 8 | Primera ejecución real | El `architect` genera la spec y el plan (solo lectura) y un implementador real con Claude Code trabaja sobre un repositorio de práctica | Una tarea trivial de extremo a extremo con gates reales |
 | 9 | Piloto CuotaMoto | Repetir `brief-02` desde `42d205b` y comparar con el control manual | Se cumple el criterio de éxito de la sección 18 |
+
+### Avance
+
+- **Hito 0:** entregado y verificado (CI en verde en Linux y Windows).
+- **Hito 1:** entregado y verificado (CI en verde, 32 pruebas). Pendiente de fusionar. Su revisión generó tres ajustes que recoge el brief del hito 2: sin precios inventados en los alias por defecto, estado `AWAITING_APPROVAL` y payloads tipados para el reductor.
 
 ### Estrategia de pruebas
 
@@ -664,16 +669,23 @@ Revisores independientes, enrutamiento por complejidad, avisos por Telegram, `ba
 10. **Proyecto piloto:** CuotaMoto, con tareas acotadas y verificables (sección 18).
 11. **Compatibilidad:** Batuta debe funcionar en Windows (local) y en Linux (VPS) (sección 14).
 12. **Proyecto nuevo:** `batuta init` y `SPEC-000` de fundación (sección 4).
-13. **Modo de trabajo de la Fase 1:** Claude planifica el proyecto (diseño, hoja de ruta, hitos y criterios de aceptación); el agente de codificación decide el cómo, escribe el código y registra sus decisiones; la revisión la hace el usuario con los gates, y Claude bajo petición (sección 19).
+13. **Modo de trabajo de la Fase 1:** mientras se construye Batuta, Claude planifica, tiene la autoridad sobre el diseño y puede dar órdenes concretas al agente de codificación; el agente implementa, decide lo no especificado y registra sus decisiones; la revisión la hace el usuario con los gates, y Claude bajo petición (sección 19).
+14. **Autonomía de Batuta ya terminado:** al trabajar en otros proyectos, sus agentes toman sus propias decisiones de diseño, con aprobación humana en H1 y H3 (secciones 4 y 19).
+15. **Repositorio:** `batuta` es público.
 
 ### Abiertas
 
 1. **Estrategia de `node_modules` con subtareas en paralelo** (Fase 3), descrita en la sección 18.
-2. **Visibilidad del repositorio `batuta`** (público o privado): determina si Claude puede clonarlo para revisar cada hito o si la revisión se hace con informes y diffs pegados.
 
 ## 21. Registro de cambios
 
-**v0.10**
+**v0.12**
+- Revisión del hito 1: los gates de la configuración son objetos con nombre, comando y timeout (la política de diff y los criterios los aplica el motor), nuevo estado de espera `AWAITING_APPROVAL` y sección de avance de los hitos.
+
+**v0.11**
+- Corrige la v0.10: mientras se construye Batuta, Claude tiene la autoridad sobre el diseño y puede dar órdenes concretas al agente de codificación. La autonomía de decisiones de diseño se aplica a Batuta ya terminado, en otros proyectos (el `architect` decide el stack y la persona lo aprueba en H1).
+
+**v0.10** (corregida por la v0.11)
 - Corrige la v0.9: el agente de codificación decide el cómo y registra sus decisiones; Claude solo planifica el proyecto y revisa bajo petición. Las decisiones del usuario son las únicas restricciones.
 - Las convenciones técnicas pasan a ser recomendaciones iniciales y los hitos pueden proponerse para dividirse o reordenarse.
 

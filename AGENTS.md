@@ -6,15 +6,16 @@ Batuta es un orquestador de agentes de IA. `docs/diseno.md` es el diseño del pr
 
 ## Reparto de roles
 
-- Claude planifica el proyecto: mantiene `docs/diseno.md`, la hoja de ruta, los hitos y sus criterios de aceptación.
-- Tú decides cómo se implementa: estructura del código, patrones, librerías y detalles técnicos. Escribes el código, las pruebas y la documentación técnica.
+- Claude planifica el proyecto y tiene la autoridad sobre su diseño mientras se construye Batuta: mantiene `docs/diseno.md`, la hoja de ruta, los hitos y sus criterios de aceptación. Puede darte pautas, consejos y órdenes concretas sobre el código (estructura, interfaces, nombres, patrones). Cuando el usuario te las traslade, cúmplelas.
+- Tú implementas: escribes el código, las pruebas y la documentación técnica, y decides todo lo que el diseño y las pautas no especifican.
+- Esto aplica solo a la construcción de Batuta. Cuando Batuta esté terminado y trabaje en otros proyectos, sus agentes tomarán sus propias decisiones de diseño.
 
 ## Tus límites
 
-1. Las decisiones ya tomadas por el usuario (sección 20 del diseño) son restricciones. No las cambies sin consultarlo.
+1. Lo que fija el diseño, las pautas del planificador y las decisiones del usuario (sección 20 del diseño) es obligatorio.
 2. Cumple siempre los criterios de aceptación del hito.
-3. Anota cada decisión técnica relevante en `docs/decisiones/NNN-titulo.md`: contexto, opciones, decisión y consecuencias, en pocas líneas.
-4. Si crees que el diseño tiene un error o que hay una opción mejor, propónlo en el informe (sección "Propuestas de cambio al diseño"). Puedes seguir tu propuesta si no contradice una decisión tomada ni un criterio de aceptación, y la dejas registrada. No edites `docs/diseno.md`: el usuario se lo trasladará a Claude.
+3. Anota cada decisión técnica que tomes en `docs/decisiones/NNN-titulo.md`: contexto, opciones, decisión y consecuencias, en pocas líneas.
+4. Si discrepas de una pauta, o crees que el diseño tiene un error o que hay una opción mejor, dilo en el informe (sección "Propuestas de cambio al diseño"). Mientras no se actualice el diseño, sigue lo que dice. No edites `docs/diseno.md`: el usuario se lo trasladará a Claude.
 5. Trabaja dentro del alcance del hito. Lo demás va a la sección "Pendiente" del informe.
 
 ## Cómo trabajar
@@ -24,9 +25,9 @@ Batuta es un orquestador de agentes de IA. `docs/diseno.md` es el diseño del pr
 - No hagas push ni merge salvo que el usuario lo pida.
 - Puedes agregar dependencias si las justificas en el registro de decisiones. Prefiere pocas y bien mantenidas.
 
-## Recomendaciones técnicas iniciales
+## Pautas técnicas iniciales
 
-Puedes cambiarlas si lo justificas en el registro de decisiones.
+Se aplican mientras no se actualice el diseño.
 
 - TypeScript estricto, módulos ES, Node 22 o superior y `npm workspaces`.
 - Vitest para las pruebas y ESLint para el lint, sin `any` explícito.
