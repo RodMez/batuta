@@ -97,6 +97,40 @@ describe("configuración (CA-1, CA-2, CA-3)", () => {
     }
   });
 
+  it("los alias por defecto no llevan precios inventados (CA-7)", () => {
+    const config = parseBatutaConfigYaml(PILOTO_YAML);
+    for (const alias of Object.values(config.alias_modelos)) {
+      expect(alias.entrada).toBeUndefined();
+      expect(alias.salida).toBeUndefined();
+      expect(alias.ventana).toBeGreaterThan(0);
+    }
+  });
+
+  it("los precios explícitos por alias siguen aceptándose", () => {
+    const config = parseBatutaConfig({
+      ...baseValida(),
+      alias_modelos: {
+        rapido: { modelo: "m-rapido", entrada: 1, salida: 2, ventana: 100_000 },
+      },
+      modelos: {
+        scout: "rapido",
+        resumenes: "rapido",
+        architect: "rapido",
+        "software-engineer": {
+          baja: "rapido",
+          media: "rapido",
+          alta: "rapido",
+        },
+        debugger: "rapido",
+        revisores: "rapido",
+      },
+    });
+    expect(config.alias_modelos["rapido"]).toMatchObject({
+      entrada: 1,
+      salida: 2,
+    });
+  });
+
   it("falta un gate: falla indicando la ruta", () => {
     const { gates: _omit, ...sinGates } = baseValida();
     expect(_omit).toBeDefined();

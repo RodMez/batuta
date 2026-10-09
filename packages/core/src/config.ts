@@ -3,11 +3,15 @@ import { z } from "zod";
 import { parse as parseYaml } from "yaml";
 import { formatZodError } from "./validation.js";
 
-/** Alias de modelo con nombre completo, precios y ventana (sección 3.4). */
+/**
+ * Alias de modelo con nombre completo, ventana y precios opcionales
+ * (sección 3.4). Sin `entrada`/`salida` el costo en USD no se puede
+ * calcular; un hito posterior hará que el preflight lo advierta.
+ */
 export const ModeloPrecioSchema = z.strictObject({
   modelo: z.string().min(1),
-  entrada: z.number().min(0),
-  salida: z.number().min(0),
+  entrada: z.number().min(0).optional(),
+  salida: z.number().min(0).optional(),
   ventana: z.number().int().positive(),
 });
 
@@ -90,12 +94,12 @@ export const EJECUTOR_VALUES = ["claude-code", "opencode"] as const;
 
 const DEFAULT_ALIAS_MODELOS: Record<
   string,
-  { modelo: string; entrada: number; salida: number; ventana: number }
+  { modelo: string; entrada?: number; salida?: number; ventana: number }
 > = {
-  rapido: { modelo: "rapido", entrada: 1, salida: 1, ventana: 100_000 },
-  medio: { modelo: "medio", entrada: 3, salida: 4, ventana: 100_000 },
-  fuerte: { modelo: "fuerte", entrada: 5, salida: 15, ventana: 200_000 },
-  revisor: { modelo: "revisor", entrada: 3, salida: 4, ventana: 100_000 },
+  rapido: { modelo: "rapido", ventana: 100_000 },
+  medio: { modelo: "medio", ventana: 100_000 },
+  fuerte: { modelo: "fuerte", ventana: 200_000 },
+  revisor: { modelo: "revisor", ventana: 100_000 },
 };
 
 const DEFAULT_MODELOS: {
