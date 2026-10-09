@@ -116,7 +116,7 @@ describe("EjecutorComandosReal", () => {
     const comando = [
       'node -e "',
       "const cp = require('node:child_process');",
-      "const g = cp.spawn(process.execPath, ['-e', 'setInterval(() => {}, 200)'], { detached: true, stdio: 'ignore' });",
+      "const g = cp.spawn(process.execPath, ['-e', 'setInterval(() => {}, 200)'], { stdio: 'ignore' });",
       "console.log('NIETO:' + g.pid);",
       "setInterval(() => {}, 200);",
       '"',
@@ -134,11 +134,15 @@ describe("EjecutorComandosReal", () => {
     const nietoPid = parseInt(match![1], 10);
     expect(nietoPid).toBeGreaterThan(0);
 
-    // Esperar un momento a que el SO procese la terminación del árbol
-    await new Promise((r) => setTimeout(r, 200));
+    // Esperar a que el SO procese la terminación del árbol (polling hasta 1000 ms)
+    let nietoVivo = true;
+    for (let i = 0; i < 20; i++) {
+      nietoVivo = existeProceso(nietoPid);
+      if (!nietoVivo) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
 
     // El nieto debe estar muerto
-    const nietoVivo = existeProceso(nietoPid);
     if (nietoVivo) {
       matarArbolProcesos(nietoPid); // Limpieza de seguridad
     }
