@@ -86,16 +86,19 @@ export {
   dirRun,
   dirRuns,
   generarRunId,
+  InfoBloqueoSchema,
+  parsearBloqueo,
   RunIdSchema,
   RunStore,
   rutaBloqueoRun,
   rutaEstado,
   rutaEventos,
 } from "./runStore.js";
-export type { NuevoEvento, ResultadoRestore } from "./runStore.js";
+export type { InfoBloqueo, NuevoEvento, ResultadoRestore } from "./runStore.js";
 export {
   detalleError,
   esNoEncontrado,
+  existeProceso,
   relojSistema,
   sistemaArchivosNode,
 } from "./sistema.js";

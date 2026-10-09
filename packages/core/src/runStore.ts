@@ -1,3 +1,4 @@
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { pid } from "node:process";
 import { z } from "zod";
@@ -18,6 +19,7 @@ import type { Reloj, SistemaArchivos } from "./sistema.js";
 import {
   detalleError,
   esNoEncontrado,
+  existeProceso,
   relojSistema,
   sistemaArchivosNode,
 } from "./sistema.js";
@@ -130,29 +132,123 @@ async function escrituraAtomica(
   await fs.renombrar(tmp, destino);
 }
 
+/** Información guardada en el archivo `.lock` de una ejecución. */
+export interface InfoBloqueo {
+  pid: number;
+  equipo: string;
+  hora: string;
+}
+
+export const InfoBloqueoSchema = z.strictObject({
+  pid: z.number().int().positive(),
+  equipo: z.string().min(1),
+  hora: z.string().min(1),
+});
+
 /**
- * Garantía de escritor único por ejecución: un archivo `.lock` creado en
- * exclusiva (`wx`). Si ya existe, otro proceso está escribiendo y se falla
- * con un mensaje explícito en vez de entrelazar líneas. Un bloqueo
- * obsoleto tras una caída se limpia borrando el `.lock`. El bloqueo se
- * libera siempre, incluso si la operación falla.
+ * Parsea el contenido de un archivo `.lock`. Admite el formato JSON con
+ * `{ pid, equipo, hora }` y tolera un número suelto (formato previo del hito 2).
+ */
+export function parsearBloqueo(
+  texto: string,
+  equipoFallback = "",
+): InfoBloqueo | null {
+  try {
+    const obj = JSON.parse(texto) as unknown;
+    const resultado = InfoBloqueoSchema.safeParse(obj);
+    if (resultado.success) {
+      return resultado.data;
+    }
+  } catch {
+    const pidNum = Number.parseInt(texto.trim(), 10);
+    if (!Number.isNaN(pidNum) && pidNum > 0) {
+      return {
+        pid: pidNum,
+        equipo: equipoFallback,
+        hora: "",
+      };
+    }
+  }
+  return null;
+}
+
+export interface OpcionesBloqueo {
+  reloj?: Reloj;
+  comprobarProceso?: (pid: number) => boolean;
+  equipo?: string;
+}
+
+/**
+ * Garantía de escritor único por ejecución: un archivo `.lock` con el PID,
+ * el equipo y la hora. Si ya existe:
+ * - Si es de otro equipo: falla con un mensaje claro.
+ * - Si es del mismo equipo y el proceso sigue vivo: falla con un mensaje claro.
+ * - Si es del mismo equipo y el proceso ya no existe: se considera obsoleto,
+ *   se recupera y se pasa la información previa al llamante para dejar
+ *   constancia en el registro.
+ * El bloqueo se libera siempre en el `finally`.
  */
 async function conBloqueo<T>(
   fs: SistemaArchivos,
   bloqueo: string,
-  operacion: () => Promise<T>,
+  operacion: (recuperado?: InfoBloqueo) => Promise<T>,
+  opciones?: OpcionesBloqueo,
 ): Promise<T> {
+  const reloj = opciones?.reloj ?? relojSistema;
+  const comprobar = opciones?.comprobarProceso ?? existeProceso;
+  const equipoActual = opciones?.equipo ?? hostname();
+  const infoActual: InfoBloqueo = {
+    pid,
+    equipo: equipoActual,
+    hora: reloj.ahoraIso(),
+  };
+
+  let recuperado: InfoBloqueo | undefined;
+
   try {
-    await fs.escribirExclusivo(bloqueo, String(pid));
-  } catch (error) {
-    throw new Error(
-      `No se pudo adquirir el bloqueo ${bloqueo} (¿otro proceso escribe esta ejecución? Si es un bloqueo obsoleto, bórralo): ${detalleError(error)}`,
-    );
+    await fs.escribirExclusivo(bloqueo, JSON.stringify(infoActual));
+  } catch {
+    let contenido: string;
+    try {
+      contenido = await fs.leerArchivo(bloqueo);
+    } catch (errorLectura) {
+      throw new Error(
+        `No se pudo adquirir el bloqueo ${bloqueo} y falló al leerlo: ${detalleError(errorLectura)}`,
+      );
+    }
+
+    const infoExistente = parsearBloqueo(contenido, equipoActual);
+    if (!infoExistente) {
+      throw new Error(
+        `No se pudo adquirir el bloqueo ${bloqueo}: datos corruptos en el archivo. Si es obsoleto, bórralo manualmente.`,
+      );
+    }
+
+    if (infoExistente.equipo !== "" && infoExistente.equipo !== equipoActual) {
+      throw new Error(
+        `No se pudo adquirir el bloqueo ${bloqueo}: pertenece al equipo "${infoExistente.equipo}" (PID ${infoExistente.pid}, hora ${infoExistente.hora}). Solo puede recuperarse en el mismo equipo (${equipoActual}).`,
+      );
+    }
+
+    if (comprobar(infoExistente.pid)) {
+      throw new Error(
+        `No se pudo adquirir el bloqueo ${bloqueo}: el proceso ${infoExistente.pid} en este equipo (${infoExistente.equipo || equipoActual}) sigue activo (bloqueo creado a las ${infoExistente.hora}).`,
+      );
+    }
+
+    // El proceso ya no existe en el mismo equipo: se considera obsoleto y se recupera.
+    recuperado = infoExistente;
+    await fs.escribirArchivo(bloqueo, JSON.stringify(infoActual));
   }
+
   try {
-    return await operacion();
+    return await operacion(recuperado);
   } finally {
-    await fs.borrar(bloqueo);
+    try {
+      await fs.borrar(bloqueo);
+    } catch {
+      // Ignorar si el archivo ya fue borrado
+    }
   }
 }
 
@@ -166,7 +262,25 @@ export class RunStore {
     private readonly dirBatuta: string,
     private readonly fs: SistemaArchivos = sistemaArchivosNode,
     private readonly reloj: Reloj = relojSistema,
+    private readonly comprobarProceso: (pid: number) => boolean = existeProceso,
+    private readonly equipo: string = hostname(),
   ) {}
+
+  private conBloqueoRun<T>(
+    runId: string,
+    operacion: (recuperado?: InfoBloqueo) => Promise<T>,
+  ): Promise<T> {
+    return conBloqueo(
+      this.fs,
+      rutaBloqueo(this.dirBatuta, runId),
+      operacion,
+      {
+        reloj: this.reloj,
+        comprobarProceso: this.comprobarProceso,
+        equipo: this.equipo,
+      },
+    );
+  }
 
   /**
    * Crea la ejecución: genera el run_id, crea la estructura en disco,
@@ -212,7 +326,7 @@ export class RunStore {
    * caída, falla y pide `restaurar` primero en vez de soldar bytes rotos.
    */
   async agregar(runId: string, nuevo: NuevoEvento): Promise<BatutaEvent> {
-    return conBloqueo(this.fs, rutaBloqueo(this.dirBatuta, runId), async () => {
+    return this.conBloqueoRun(runId, async (recuperado) => {
       const ruta = rutaEventos(this.dirBatuta, runId);
       let texto: string;
       try {
@@ -230,6 +344,29 @@ export class RunStore {
         throw new Error(
           `events.jsonl de ${runId} termina en una línea cortada: ejecuta restaurar antes de continuar`,
         );
+      }
+      if (recuperado) {
+        try {
+          await this.fs.agregarArchivo(
+            join(dirLogs(this.dirBatuta, runId), "bloqueos.log"),
+            `[${this.reloj.ahoraIso()}] Bloqueo obsoleto recuperado: PID ${recuperado.pid} en ${recuperado.equipo} (creado ${recuperado.hora})\n`,
+          );
+        } catch {
+          // Ignorar si falla la escritura del log auxiliar
+        }
+        const reanudacion = parseEvent({
+          version_esquema: 1,
+          id: idEvento(lectura.eventos.length + 1),
+          run_id: runId,
+          ts: this.reloj.ahoraIso(),
+          tipo: "ejecucion_reanudada",
+          payload: {
+            motivo: "bloqueo_obsoleto_recuperado",
+            bloqueo_obsoleto_recuperado: recuperado,
+          },
+        });
+        await this.fs.agregarArchivo(ruta, `${serializeEvent(reanudacion)}\n`);
+        lectura.eventos.push(reanudacion);
       }
       const evento = parseEvent({
         version_esquema: 1,
@@ -302,7 +439,7 @@ export class RunStore {
     runId: string,
     commit: string | null,
   ): Promise<Checkpoint> {
-    return conBloqueo(this.fs, rutaBloqueo(this.dirBatuta, runId), async () => {
+    return this.conBloqueoRun(runId, async () => {
       const lectura = await this.leer(runId);
       if (lectura.truncado) {
         throw new Error(
@@ -334,7 +471,7 @@ export class RunStore {
    * no agrega el evento de reanudación y devuelve el estado tal cual.
    */
   async restaurar(runId: string): Promise<ResultadoRestore> {
-    return conBloqueo(this.fs, rutaBloqueo(this.dirBatuta, runId), async () => {
+    return this.conBloqueoRun(runId, async (recuperado) => {
       const ruta = rutaEventos(this.dirBatuta, runId);
       let texto: string;
       try {
@@ -346,6 +483,16 @@ export class RunStore {
           );
         }
         throw error;
+      }
+      if (recuperado) {
+        try {
+          await this.fs.agregarArchivo(
+            join(dirLogs(this.dirBatuta, runId), "bloqueos.log"),
+            `[${this.reloj.ahoraIso()}] Bloqueo obsoleto recuperado: PID ${recuperado.pid} en ${recuperado.equipo} (creado ${recuperado.hora})\n`,
+          );
+        } catch {
+          // Ignorar si falla el log auxiliar
+        }
       }
       const lectura = leerTextoRegistro(texto);
       if (lectura.truncado) {
@@ -392,13 +539,19 @@ export class RunStore {
           eventosReproducidos: eventos.length - desde,
         };
       }
+      const payload: Record<string, unknown> = {
+        eventos_reproducidos: eventos.length - desde,
+      };
+      if (recuperado) {
+        payload.bloqueo_obsoleto_recuperado = recuperado;
+      }
       const reanudacion = parseEvent({
         version_esquema: 1,
         id: idEvento(eventos.length + 1),
         run_id: runId,
         ts: this.reloj.ahoraIso(),
         tipo: "ejecucion_reanudada",
-        payload: { eventos_reproducidos: eventos.length - desde },
+        payload,
       });
       await this.fs.agregarArchivo(ruta, `${serializeEvent(reanudacion)}\n`);
       estado = applyEvent(estado, reanudacion);
