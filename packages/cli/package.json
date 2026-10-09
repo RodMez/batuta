@@ -1,0 +1,19 @@
+{
+  "name": "@batuta/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "batuta": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "dependencies": {
+    "@batuta/core": "*",
+    "commander": "^13.1.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}
