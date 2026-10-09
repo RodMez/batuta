@@ -83,28 +83,3 @@ export function esNoEncontrado(error: unknown): boolean {
 export function detalleError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
-
-/**
- * Comprueba si un proceso sigue vivo por su PID de forma portable
- * (Windows y Linux) sin enviar una señal destructiva.
- */
-export function existeProceso(pid: number): boolean {
-  if (pid <= 0 || !Number.isInteger(pid)) {
-    return false;
-  }
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      (error as { code?: unknown }).code === "EPERM"
-    ) {
-      return true;
-    }
-    return false;
-  }
-}
-

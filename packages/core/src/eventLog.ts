@@ -23,7 +23,7 @@ export function leerTextoRegistro(texto: string): LecturaRegistro {
   }
   const completo = texto.endsWith("\n");
   const trozos = texto.split("\n");
-  const utiles = trozos.slice(0, -1);
+  const utiles = completo ? trozos.slice(0, -1) : trozos.slice(0, -1);
   const eventos: BatutaEvent[] = [];
   utiles.forEach((trozo: string, indice: number): void => {
     const linea = trozo.endsWith("\r") ? trozo.slice(0, -1) : trozo;
