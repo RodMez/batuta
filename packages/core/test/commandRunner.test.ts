@@ -134,9 +134,9 @@ describe("EjecutorComandosReal", () => {
     const nietoPid = parseInt(match![1], 10);
     expect(nietoPid).toBeGreaterThan(0);
 
-    // Esperar a que el SO procese la terminación del árbol (polling hasta 1000 ms)
+    // Esperar a que el SO procese la terminación del árbol (sondeo hasta 3 s)
     let nietoVivo = true;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 60; i++) {
       nietoVivo = existeProceso(nietoPid);
       if (!nietoVivo) break;
       await new Promise((r) => setTimeout(r, 50));

@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import {
   appendFile,
   mkdir,
@@ -87,6 +88,7 @@ export function detalleError(error: unknown): string {
 /**
  * Comprueba si un proceso sigue vivo por su PID de forma portable
  * (Windows y Linux) sin enviar una señal destructiva.
+ * En Linux, si el proceso está en estado zombi ('Z'), se considera muerto.
  */
 export function existeProceso(pid: number): boolean {
   if (pid <= 0 || !Number.isInteger(pid)) {
@@ -94,7 +96,6 @@ export function existeProceso(pid: number): boolean {
   }
   try {
     process.kill(pid, 0);
-    return true;
   } catch (error) {
     if (
       typeof error === "object" &&
@@ -106,5 +107,27 @@ export function existeProceso(pid: number): boolean {
     }
     return false;
   }
+
+  // En Linux, un proceso zombie responde a kill(pid, 0) pero ya terminó.
+  // Se considera muerto leyendo su estado en /proc/<pid>/stat.
+  if (process.platform === "linux") {
+    try {
+      const rutaStat = `/proc/${pid}/stat`;
+      if (existsSync(rutaStat)) {
+        const contenido = readFileSync(rutaStat, "utf8");
+        const finNombre = contenido.lastIndexOf(")");
+        if (finNombre !== -1) {
+          const estado = contenido.slice(finNombre + 2).trim().charAt(0);
+          if (estado === "Z" || estado === "X") {
+            return false;
+          }
+        }
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  return true;
 }
 
