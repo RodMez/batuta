@@ -39,6 +39,15 @@ export {
 } from "./config.js";
 export type { BatutaConfig, Gate } from "./config.js";
 export {
+  CheckpointSchema,
+  indiceDeCheckpoint,
+  nombreCheckpoint,
+  parseCheckpoint,
+} from "./checkpoints.js";
+export type { Checkpoint } from "./checkpoints.js";
+export { leerRegistro, leerTextoRegistro, prefijoCompleto } from "./eventLog.js";
+export type { LecturaRegistro } from "./eventLog.js";
+export {
   EVENT_TYPES,
   EventSchema,
   EventTypeSchema,
@@ -55,6 +64,40 @@ export {
   TASK_COMPLEXITIES,
 } from "./plan.js";
 export type { Plan, Subtask, TaskComplexity } from "./plan.js";
+export {
+  AgenteCompletadoPayloadSchema,
+  AprobacionPayloadSchema,
+  EntradaRecibidaPayloadSchema,
+  LimitePayloadSchema,
+  applyEvent,
+  estadoInicial,
+  rebuildState,
+} from "./reducer.js";
+export type {
+  AgenteCompletadoPayload,
+  AprobacionPayload,
+  EntradaRecibidaPayload,
+  LimitePayload,
+} from "./reducer.js";
+export {
+  dirCheckpoints,
+  dirLogs,
+  dirRun,
+  dirRuns,
+  generarRunId,
+  RunIdSchema,
+  RunStore,
+  rutaEstado,
+  rutaEventos,
+} from "./runStore.js";
+export type { NuevoEvento, ResultadoRestore } from "./runStore.js";
+export {
+  detalleError,
+  esNoEncontrado,
+  relojSistema,
+  sistemaArchivosNode,
+} from "./sistema.js";
+export type { Reloj, SistemaArchivos } from "./sistema.js";
 export {
   PUERTAS,
   PuertaSchema,
