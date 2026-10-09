@@ -56,10 +56,12 @@ export {
 } from "./plan.js";
 export type { Plan, Subtask, TaskComplexity } from "./plan.js";
 export {
+  PUERTAS,
+  PuertaSchema,
   RUN_STATUSES,
   parseRunState,
   RunStateSchema,
   RunStatusSchema,
 } from "./state.js";
-export type { RunState, RunStatus } from "./state.js";
+export type { Puerta, RunState, RunStatus } from "./state.js";
 export { formatZodError, stringifyIssuePath } from "./validation.js";

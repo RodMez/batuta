@@ -29,6 +29,7 @@ describe("estado de la ejecución (CA-1)", () => {
         "FAILED",
         "ABORTED",
         "WAITING_INPUT",
+        "AWAITING_APPROVAL",
       ]),
     );
   });
@@ -49,6 +50,35 @@ describe("estado de la ejecución (CA-1)", () => {
     expect(() =>
       parseRunState({ run_id: "RUN-2026-10-09-001", estado: "INVENTADO" }),
     ).toThrow(/estado/);
+  });
+
+  it("AWAITING_APPROVAL exige puerta pendiente e indica su ruta (CA-7)", () => {
+    const espera = parseRunState({
+      run_id: "RUN-2026-10-09-001",
+      estado: "AWAITING_APPROVAL",
+      puerta_pendiente: "H1",
+    });
+    expect(espera.puerta_pendiente).toBe("H1");
+    expect(() =>
+      parseRunState({
+        run_id: "RUN-2026-10-09-001",
+        estado: "AWAITING_APPROVAL",
+      }),
+    ).toThrow(/puerta_pendiente/);
+    expect(() =>
+      parseRunState({
+        run_id: "RUN-2026-10-09-001",
+        estado: "AWAITING_APPROVAL",
+        puerta_pendiente: "H9",
+      }),
+    ).toThrow(/puerta_pendiente/);
+    expect(() =>
+      parseRunState({
+        run_id: "RUN-2026-10-09-001",
+        estado: "SPEC",
+        puerta_pendiente: "H1",
+      }),
+    ).toThrow(/puerta_pendiente/);
   });
 });
 
