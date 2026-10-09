@@ -12,7 +12,7 @@ import { leerRegistro, leerTextoRegistro, prefijoCompleto } from "./eventLog.js"
 import type { LecturaRegistro } from "./eventLog.js";
 import type { BatutaEvent, EventType } from "./events.js";
 import { parseEvent, serializeEvent } from "./events.js";
-import { applyEvent, estadoInicial, rebuildState } from "./reducer.js";
+import { applyEvent, esEstadoTerminal, estadoInicial, rebuildState } from "./reducer.js";
 import { parseRunState, type RunState } from "./state.js";
 import type { Reloj, SistemaArchivos } from "./sistema.js";
 import {
@@ -72,6 +72,11 @@ export function dirLogs(dirBatuta: string, runId: string): string {
 
 function rutaBloqueo(dirBatuta: string, runId: string): string {
   return join(dirRun(dirBatuta, runId), ".lock");
+}
+
+/** Ruta del bloqueo de escritor único (para limpiar un bloqueo obsoleto). */
+export function rutaBloqueoRun(dirBatuta: string, runId: string): string {
+  return rutaBloqueo(dirBatuta, runId);
 }
 
 /**
@@ -325,6 +330,8 @@ export class RunStore {
    * bytes que se reescriben, pues nunca fueron un evento válido), parte
    * del último checkpoint válido y reproduce los eventos posteriores,
    * registrando `ejecucion_reanudada`. Deja `state.json` reconstruido.
+   * Si el registro ya está en estado terminal no hay nada que continuar:
+   * no agrega el evento de reanudación y devuelve el estado tal cual.
    */
   async restaurar(runId: string): Promise<ResultadoRestore> {
     return conBloqueo(this.fs, rutaBloqueo(this.dirBatuta, runId), async () => {
@@ -371,6 +378,19 @@ export class RunStore {
         eventos.slice(desde).forEach((evento: BatutaEvent): void => {
           estado = applyEvent(estado, evento);
         });
+      }
+      if (esEstadoTerminal(estado.estado)) {
+        await escrituraAtomica(
+          this.fs,
+          rutaEstado(this.dirBatuta, runId),
+          JSON.stringify(estado),
+        );
+        return {
+          estado,
+          desdeCheckpoint: base !== null,
+          colaDescartada: lectura.truncado,
+          eventosReproducidos: eventos.length - desde,
+        };
       }
       const reanudacion = parseEvent({
         version_esquema: 1,

@@ -70,6 +70,7 @@ export {
   EntradaRecibidaPayloadSchema,
   LimitePayloadSchema,
   applyEvent,
+  esEstadoTerminal,
   estadoInicial,
   rebuildState,
 } from "./reducer.js";
@@ -87,6 +88,7 @@ export {
   generarRunId,
   RunIdSchema,
   RunStore,
+  rutaBloqueoRun,
   rutaEstado,
   rutaEventos,
 } from "./runStore.js";

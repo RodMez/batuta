@@ -45,8 +45,13 @@ export type LimitePayload = z.infer<typeof LimitePayloadSchema>;
 
 const TERMINALES: readonly RunStatus[] = ["DONE", "FAILED", "ABORTED"];
 
-function esTerminal(estado: RunStatus): boolean {
+/** Indica si un estado es terminal (DONE, FAILED o ABORTED). */
+export function esEstadoTerminal(estado: RunStatus): boolean {
   return TERMINALES.includes(estado);
+}
+
+function esTerminal(estado: RunStatus): boolean {
+  return esEstadoTerminal(estado);
 }
 
 /** Estado al que vuelve cada puerta tras ser otorgada (sección 4). */
