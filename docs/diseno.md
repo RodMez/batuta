@@ -1,8 +1,8 @@
 # Batuta: sistema orquestador de agentes de IA
 
-> Diseño v0.12 · Plan cerrado, piloto verificado y plan de codificación · 9 de octubre de 2026
+> Diseño v0.13 · Plan cerrado, piloto verificado y plan de codificación · 9 de octubre de 2026
 > Estado: solo planificación. Todavía no hay código ni lenguaje elegido.
-> Las versiones v0.2 a v0.12 incorporan la comparación con ForgeFlow Harness y las decisiones de ejecución, despliegue y avisos (ver el registro de cambios al final).
+> Las versiones v0.2 a v0.13 incorporan la comparación con ForgeFlow Harness y las decisiones de ejecución, despliegue y avisos (ver el registro de cambios al final).
 
 ## 1. Visión
 
@@ -72,6 +72,7 @@ brief.md ──▶ CLI de Batuta
 - Tras completar cada subtarea se escribe un **checkpoint** (estado serializado + hash del commit).
 - **Condensación de contexto:** cuando el contexto de un agente supera un umbral, un paso de resumen comprime los eventos antiguos en un solo evento `resumen` y conserva en bruto los últimos K eventos.
 - Reanudar es releer el registro hasta el último checkpoint válido y continuar en una sesión limpia del agente, entregándole un resumen cronológico de lo ya hecho.
+- Solo un proceso escribe el registro de una ejecución, mediante un archivo `.lock` con el PID, el equipo y la hora. Si el proceso que lo creó ya no existe (por ejemplo, tras matarlo), el bloqueo se considera obsoleto y se recupera sin intervención manual, dejando constancia en el registro.
 
 **Listo cuando:** se puede matar el proceso a mitad de una subtarea y `batuta resume` continúa sin repetir trabajo ya verificado.
 
@@ -629,8 +630,10 @@ Los hitos fijan el objetivo y el criterio de terminación. El agente puede propo
 
 ### Avance
 
-- **Hito 0:** entregado y verificado (CI en verde en Linux y Windows).
-- **Hito 1:** entregado y verificado (CI en verde, 32 pruebas). Pendiente de fusionar. Su revisión generó tres ajustes que recoge el brief del hito 2: sin precios inventados en los alias por defecto, estado `AWAITING_APPROVAL` y payloads tipados para el reductor.
+- **Hito 0:** aceptado y fusionado en `main` (CI en verde en Linux y Windows).
+- **Hito 1:** aceptado y fusionado (32 pruebas). Su revisión generó tres ajustes que se resolvieron en el hito 2.
+- **Hito 2:** aceptado y fusionado (9 archivos de prueba, 61 pruebas, CI en verde). Su revisión dejó un ajuste previo para el hito 3: la recuperación automática de bloqueos obsoletos del registro.
+- **Hito 3:** en preparación.
 
 ### Estrategia de pruebas
 
@@ -678,6 +681,9 @@ Revisores independientes, enrutamiento por complejidad, avisos por Telegram, `ba
 1. **Estrategia de `node_modules` con subtareas en paralelo** (Fase 3), descrita en la sección 18.
 
 ## 21. Registro de cambios
+
+**v0.13**
+- Revisión del hito 2: aceptado. El bloqueo del registro guarda PID, equipo y hora, y un bloqueo obsoleto se recupera solo (necesario para reanudar tras matar el proceso). Sección de avance actualizada.
 
 **v0.12**
 - Revisión del hito 1: los gates de la configuración son objetos con nombre, comando y timeout (la política de diff y los criterios los aplica el motor), nuevo estado de espera `AWAITING_APPROVAL` y sección de avance de los hitos.
