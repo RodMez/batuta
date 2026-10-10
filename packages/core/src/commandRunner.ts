@@ -78,10 +78,12 @@ export const VARIABLES_ENTORNO_PERMITIDAS: readonly string[] = [
 export function construirEntornoLimpio(
   entornoBase: NodeJS.ProcessEnv = process.env,
   entornoExtra: Record<string, string> = {},
+  nombresPermitidosExtra: readonly string[] = [],
 ): NodeJS.ProcessEnv {
-  const permitidasNormalizadas = new Set(
-    VARIABLES_ENTORNO_PERMITIDAS.map((v) => v.toUpperCase()),
-  );
+  const permitidasNormalizadas = new Set([
+    ...VARIABLES_ENTORNO_PERMITIDAS.map((v) => v.toUpperCase()),
+    ...nombresPermitidosExtra.map((v) => v.toUpperCase()),
+  ]);
 
   const limpio: Record<string, string> = {};
 
