@@ -24,12 +24,18 @@ separar la decisión pura de los efectos y entregar por partes.
    proceso no podría terminar y volver a arrancar, contra la sección 14.
 
 ## Decisión
-Opción 1, en `packages/core/src/motor.ts` con piezas puras separadas:
-`seleccionModelo.ts` (rol/complejidad/intento → alias/modelo; el intento 2
+Opción 1, con piezas puras separadas: `motorTipos.ts` (tipos, progreso y
+`hashContenido`), `motorRutas.ts` (rutas de la ejecución y persistencia),
+`motorDecision.ts` (`siguientePaso` y `progresoInicial`), `motorPrompts.ts`
+(construcción de prompts), `motorAprobaciones.ts` (puertas H0–H3),
+`motorSubtareas.ts` (bucle implementar/evaluar/confirmar), `motorLimites.ts`
+(uso, límites y fallos) y `motorResumen.ts` (cierre y `summary.md`); la clase
+`MotorFlujo` (`motor.ts`) solo orquesta. Además `seleccionModelo.ts`
+(rol/complejidad/intento → alias/modelo; el intento 2
 sube baja→media→fuerte), `informeFallo.ts` (recorte a 2000 caracteres y
 últimas 30 líneas; firma gate+código+primeras líneas para bucles),
 `notificador.ts` (interfaz + `NotificadorNulo`) y evento `advertencia`
-(no-op en el reductor) para costos desconocidos. Reglas aplicadas: diff antes
+(no-op en el reductor, confirmado: se queda) para costos desconocidos. Reglas aplicadas: diff antes
 que gates; violación de diff resetea antes de reintentar, fallo de gates
 conserva el worktree para corrección incremental; mismo error dos veces o
 dos fallos → `debugger`; NEEDS_INPUT → `WAITING_INPUT` con respuesta incluida
@@ -70,6 +76,16 @@ rechazo y reanudación; se añadieron para H2 y se extendió la reanudación con
 H0/H1/H3. Queda como límite conocido que un cambio de spec/plan *después* de
 superar su puerta solo invalida el flag sin re-solicitarla (el reductor no
 permite pedir H1/H2 fuera de SPEC/PLAN).
+
+## Límite conocido del motor (confirmado en el hito 7)
+
+Un cambio de `spec.md` o `plan.json` *después* de superar su puerta (H1/H2)
+solo invalida la aprobación guardada, sin volver a solicitarla: el reductor
+no permite pedir H1/H2 fuera de los estados SPEC/PLAN, y el motor no
+retrocede en el ciclo de vida. La detección previa a la aprobación (hash
+pendiente: si el documento cambia mientras está pausada, la primera
+aprobación pide de nuevo) sí está cubierta y probada. El evento
+`advertencia` se confirma y se queda.
 
 ## Consecuencias
 - **Positivas**: Escenarios probados por separado (decisión pura + integración
