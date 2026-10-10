@@ -151,3 +151,23 @@ export type {
   TipoViolacionDiff,
   ViolacionDiff,
 } from "./diffPolicy.js";
+export {
+  compararVersiones,
+  esArchivoBinario,
+  IDENTIDAD_BATUTA_POR_DEFECTO,
+  ModuloGitReal,
+  parsearLineasAnadidasDiff,
+  parsearNumstatZ,
+  parsearWorktreesPorcelain,
+  VERSION_MINIMA_GIT,
+} from "./git.js";
+export type {
+  InfoComprobacionesPrevias,
+  InfoWorktree,
+  ModuloGit,
+  OpcionesCrearWorktree,
+  OpcionesListarCambios,
+  ResultadoCommitSubtarea,
+  WorktreeListado,
+  WorktreesHuerfanos,
+} from "./git.js";
