@@ -48,6 +48,13 @@ export type { Checkpoint } from "./checkpoints.js";
 export { leerRegistro, leerTextoRegistro, prefijoCompleto } from "./eventLog.js";
 export type { LecturaRegistro } from "./eventLog.js";
 export {
+  MODELO_CAPTURA_POR_DEFECTO,
+  VARIABLES_MODELO_CAPTURA,
+  crearContextoCaptura,
+  crearInputCaptura,
+  modeloCapturaDesdeEntorno,
+} from "./captura.js";
+export {
   EVENT_TYPES,
   EventSchema,
   EventTypeSchema,
