@@ -43,6 +43,10 @@ class ComandoBatuta extends Command {
   createHelp(): Help {
     return new AyudaEspanol();
   }
+
+  createCommand(nombre?: string): Command {
+    return new ComandoBatuta(nombre);
+  }
 }
 
 async function actuar(resultado: Promise<ResultadoCLI>): Promise<void> {
