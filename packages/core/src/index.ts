@@ -192,6 +192,19 @@ export type { Aviso, Notificador, TipoAviso } from "./notificador.js";
 export { seleccionarModelo } from "./seleccionModelo.js";
 export type { DecisionModelo } from "./seleccionModelo.js";
 export {
+  MotorFlujo,
+  hashContenido,
+  siguientePaso,
+} from "./motor.js";
+export type {
+  DependenciasMotor,
+  OpcionesIniciar,
+  PasoSiguiente,
+  ProgresoMotor,
+  ProgresoSubtarea,
+  ResultadoMotor,
+} from "./motor.js";
+export {
   calcularCostoEstimado,
   cargarPlantillaPrompt,
   ClaudeCodeRunner,
