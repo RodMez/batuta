@@ -42,6 +42,35 @@ H3 y DONE; abortar elimina worktree/rama; reanudar usa `restaurar` (hito 3),
 resetea al último commit y repite sin contar. Límites nuevos en
 `limites` con defecto (3, 2, 600) y plantilla `prompts/debugger.md`.
 
+## Correcciones antes de fusionar (revisión del planificador)
+
+1. **H2 nunca se solicitaba.** `siguientePaso` agrupaba `PLAN` con los
+   estados de subtarea y no comprobaba `H2_plan`, y `emitir-plan` solo emite
+   `plan_creado`: con H2 habilitada el motor ejecutaba las subtareas sin
+   aprobación del plan. Se separó el caso `PLAN` (pide H2 si está habilitada
+   y sin aprobar, también al reanudar justo tras emitir el plan) y la pausa
+   H3 se movió de `generarCierre` a `siguientePaso` en `FINALIZE`, para que
+   toda decisión de pausa se pruebe sin efectos.
+2. **`usd_por_ejecucion` opcional sin defecto.** Tope total en dólares que
+   solo se aplica con precios conocidos (si algún costo es desconocido,
+   rige la advertencia y el control por tokens). El evento `limite_alcanzado`
+   distingue el límite (`tokens_por_ejecucion`, `minutos_por_ejecucion`,
+   `usd_por_agente`, `usd_por_ejecucion`).
+3. **Hash del commit por subtarea en `summary.md`.** Ya se incluía
+   (`commit <hash>` por subtarea); se fijó con una prueba que lo compara con
+   `motor.json`.
+
+## Por qué las pruebas no detectaron el fallo de H2
+
+Todas las configuraciones de prueba usaban `H2_plan: false` (la puerta es
+"opcional" en el diseño y desactivarla acortaba los flujos) y los tests de
+`siguientePaso` no cubrían `PLAN` con H2 habilitada. Lección: cada puerta
+(H0–H3) debe tener al menos una prueba activada de pausa, aprobación,
+rechazo y reanudación; se añadieron para H2 y se extendió la reanudación con
+H0/H1/H3. Queda como límite conocido que un cambio de spec/plan *después* de
+superar su puerta solo invalida el flag sin re-solicitarla (el reductor no
+permite pedir H1/H2 fuera de SPEC/PLAN).
+
 ## Consecuencias
 - **Positivas**: Escenarios probados por separado (decisión pura + integración
   con repos temporales y runners guionados que escriben el worktree);
