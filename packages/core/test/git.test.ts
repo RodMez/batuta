@@ -13,9 +13,9 @@ import { EjecutorComandosReal } from "../src/commandRunner.js";
 
 describe("compararVersiones", () => {
   it("compara correctamente versiones semver de Git", () => {
-    expect(compararVersiones("2.20.0", VERSION_MINIMA_GIT)).toBe(true);
+    expect(compararVersiones("2.28.0", VERSION_MINIMA_GIT)).toBe(true);
     expect(compararVersiones("2.51.0", VERSION_MINIMA_GIT)).toBe(true);
-    expect(compararVersiones("2.19.9", VERSION_MINIMA_GIT)).toBe(false);
+    expect(compararVersiones("2.27.9", VERSION_MINIMA_GIT)).toBe(false);
     expect(compararVersiones("1.9.0", VERSION_MINIMA_GIT)).toBe(false);
     expect(compararVersiones("3.0.0", VERSION_MINIMA_GIT)).toBe(true);
   });
@@ -457,8 +457,10 @@ describe("ModuloGitReal", () => {
       const resLog = await ejecutor.ejecutarArgs("git", ["log", "-1", "--format=%B"], {
         cwd: info.ruta,
       });
-      // El mensaje debe conservarse exactamente
-      expect(resLog.salidaEstandar.trim()).toBe(mensajeComplejo.trim());
+      // El mensaje debe conservarse exactamente (normalizando saltos de línea para independencia del SO)
+      expect(resLog.salidaEstandar.trim().replace(/\r\n/g, "\n")).toBe(
+        mensajeComplejo.trim().replace(/\r\n/g, "\n"),
+      );
 
       await git.eliminarWorktree(info.ruta);
     });

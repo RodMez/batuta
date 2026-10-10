@@ -5,8 +5,8 @@ import type { EjecutorComandos, ResultadoComando } from "./commandRunner.js";
 import { EjecutorComandosReal } from "./commandRunner.js";
 import type { CambioArchivo } from "./diffPolicy.js";
 
-/** Versión mínima de Git requerida para soporte completo y estable de worktrees. */
-export const VERSION_MINIMA_GIT = "2.20.0";
+/** Versión mínima de Git requerida para soporte completo y estable de worktrees y --end-of-options en diff. */
+export const VERSION_MINIMA_GIT = "2.28.0";
 
 /** Identidad por defecto con la que Batuta firma los commits de subtareas. */
 export const IDENTIDAD_BATUTA_POR_DEFECTO = {
@@ -715,10 +715,16 @@ export class ModuloGitReal implements ModuloGit {
         `El commit "${commit}" no existe en el repositorio para restaurar.`,
       );
     }
+    const hashCompleto = resVerify.salidaEstandar.trim();
+    if (!hashCompleto) {
+      throw new Error(
+        `No se pudo obtener el hash del commit "${commit}" para restaurar.`,
+      );
+    }
 
-    // Descartar cambios versionados
+    // Descartar cambios versionados usando el hash completo verificado (seguro contra inyección de opciones)
     const resReset = await this.ejecutarGit(
-      ["reset", "--hard", "--end-of-options", commit],
+      ["reset", "--hard", hashCompleto],
       rutaNorm,
     );
     if (resReset.codigoSalida !== 0) {

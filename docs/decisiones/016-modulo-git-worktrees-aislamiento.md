@@ -13,7 +13,7 @@ El hito 4 proporciona a Batuta el aislamiento de cada ejecución en su propio wo
 Se implementa `ModuloGit` y `ModuloGitReal` en `@batuta/core` invocando el ejecutable `git` mediante `EjecutorComandos` con las siguientes decisiones de diseño:
 
 1. **Versión mínima de Git**:
-   - Se fija en Git 2.20.0 (`VERSION_MINIMA_GIT = "2.20.0"`), garantizando compatibilidad con `git worktree` moderno, `--porcelain` y opciones `-z`.
+   - Se fija en Git 2.28.0 (`VERSION_MINIMA_GIT = "2.28.0"`), garantizando compatibilidad con `git worktree` moderno, `--porcelain`, opciones `-z`, y soporte estable de `--end-of-options` en comandos clave como `git diff`.
 
 2. **Ubicación por defecto de worktrees (`directorio_worktrees`)**:
    - Por defecto, los worktrees se crean en un directorio hermano fuera del árbol del repositorio (`../<repo>-worktrees/<run_id>`), configurable mediante `directorio_worktrees` en `batuta.yaml`.
@@ -41,9 +41,12 @@ Se implementa `ModuloGit` y `ModuloGitReal` en `@batuta/core` invocando el ejecu
 9. **Invocación por vector de argumentos y mitigación de inyección de flags**:
    - Se añade `ejecutarArgs(ejecutable, args, opciones)` en `EjecutorComandos` y `EjecutorComandosReal`, ejecutando directamente vía `spawn` sin shell (`shell: false`) ni tokenización de cadenas.
    - `ModuloGitReal` se migra para usar exclusivamente `ejecutarArgs`. Ningún mensaje, referencia, ruta o identidad se interpola en texto de comando.
-   - Se utilizan `--end-of-options` y `--` antes de referencias y rutas cuando Git lo admite, y se validan referencias base para impedir que comiencen con guiones.
-   - **Razón**: Elimina la vulnerabilidad donde un mensaje de commit generado por un agente con comillas podía inyectar flags como `--no-verify`, saltándose hooks de pre-commit que bloquean el commit.
+   - **Uso selectivo de delimitadores por subcomando**:
+     - En `git diff`: se utiliza `--end-of-options` antes de `commitBase` (soporte estable desde Git 2.28.0).
+     - En `git reset`: en ciertas versiones de Git (como Git 2.43 en Linux), `reset --hard --end-of-options <commit>` falla porque el parser de `reset` no admite `--end-of-options` tras `--hard`. Por ello, en `volverACommit` se obtiene y valida primero el hash completo mediante `rev-parse --verify`; un hash hexadecimal de 40 caracteres nunca empieza por `-` ni puede interpretarse como opción, haciendo seguro ejecutar `git reset --hard <hashCompleto>` sin `--end-of-options`.
+     - En `git worktree add`, `git worktree remove` y `git branch -D`: se utiliza el separador estándar `--` para proteger rutas y nombres de ramas.
+   - **Razón**: Elimina la vulnerabilidad donde un mensaje de commit generado por un agente con comillas podía inyectar flags como `--no-verify`, saltándose hooks de pre-commit que bloquean el commit, asegurando al mismo tiempo compatibilidad en Linux (Git 2.43) y Windows.
 
 ## Consecuencias
 - **Positivas**: Aislamiento hermético de cada ejecución; cero interferencia con la rama principal y configuración del desarrollador; inmunidad contra inyección de argumentos en comandos de Git; compatibilidad robusta en Windows y Linux; pruebas limpias sin efectos residuales.
-- **Negativas**: Requiere que el entorno del sistema disponga del ejecutable `git >= 2.20.0` instalado en el `PATH` (validado preventivamente en `comprobacionesPrevias`).
+- **Negativas**: Requiere que el entorno del sistema disponga del ejecutable `git >= 2.28.0` instalado en el `PATH` (validado preventivamente en `comprobacionesPrevias`).
