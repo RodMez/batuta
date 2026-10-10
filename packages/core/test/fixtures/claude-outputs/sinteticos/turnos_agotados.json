@@ -1,4 +1,5 @@
 {
+  "_nota": "Fixture sintético para pruebas unitarias sin conexión a red",
   "type": "result",
   "subtype": "error",
   "is_error": true,

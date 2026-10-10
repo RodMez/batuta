@@ -19,7 +19,7 @@ import {
   verificarPreflightClaudeCode,
 } from "../src/index.js";
 
-const FIXTURES_DIR = join(import.meta.dirname, "fixtures", "claude-outputs");
+const FIXTURES_DIR = join(import.meta.dirname, "fixtures", "claude-outputs", "sinteticos");
 
 function crearInputPrueba(override?: Partial<AgentInput>): AgentInput {
   return {
