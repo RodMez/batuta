@@ -1,0 +1,35 @@
+proyecto: .
+preparacion: []
+entorno_gates: {}
+ejecutor: claude-code
+alias_modelos:
+  rapido: { modelo: rapido-demo, entrada: 1, salida: 2, ventana: 100000 }
+  medio: { modelo: medio-demo, entrada: 1, salida: 2, ventana: 100000 }
+  fuerte: { modelo: fuerte-demo, entrada: 1, salida: 2, ventana: 200000 }
+  revisor: { modelo: revisor-demo, entrada: 1, salida: 2, ventana: 100000 }
+modelos:
+  scout: rapido
+  resumenes: rapido
+  architect: fuerte
+  software-engineer: { baja: rapido, media: medio, alta: fuerte }
+  debugger: fuerte
+  revisores: revisor
+limites:
+  intentos_por_subtarea: 3
+  tokens_por_ejecucion: 1000000
+  minutos_por_ejecucion: 120
+  lineas_de_diff_max: 800
+  usd_por_agente: 2
+  pasos_por_agente: 5
+  timeout_comando_seg: 60
+  preguntas_bloqueantes: 3
+  continuaciones_por_subtarea: 2
+  timeout_preparacion_seg: 60
+aprobaciones:
+  H0_inicio: true
+  H1_spec: true
+  H2_plan: true
+  H3_merge: true
+gates:
+  - { nombre: ok, comando: "node -e \"process.exit(0)\"", timeout_seg: 60 }
+rutas_prohibidas: []
