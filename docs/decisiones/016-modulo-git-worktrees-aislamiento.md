@@ -38,6 +38,12 @@ Se implementa `ModuloGit` y `ModuloGitReal` en `@batuta/core` invocando el ejecu
 8. **Detección de huérfanos**:
    - Se analizan los worktrees reportados por `git worktree list --porcelain` y las ramas que comienzan con `batuta/`. Un worktree o rama se marca como huérfano si la ejecución asociada no está activa o si el directorio en disco ha desaparecido (`prunable`).
 
+9. **Invocación por vector de argumentos y mitigación de inyección de flags**:
+   - Se añade `ejecutarArgs(ejecutable, args, opciones)` en `EjecutorComandos` y `EjecutorComandosReal`, ejecutando directamente vía `spawn` sin shell (`shell: false`) ni tokenización de cadenas.
+   - `ModuloGitReal` se migra para usar exclusivamente `ejecutarArgs`. Ningún mensaje, referencia, ruta o identidad se interpola en texto de comando.
+   - Se utilizan `--end-of-options` y `--` antes de referencias y rutas cuando Git lo admite, y se validan referencias base para impedir que comiencen con guiones.
+   - **Razón**: Elimina la vulnerabilidad donde un mensaje de commit generado por un agente con comillas podía inyectar flags como `--no-verify`, saltándose hooks de pre-commit que bloquean el commit.
+
 ## Consecuencias
-- **Positivas**: Aislamiento hermético de cada ejecución; cero interferencia con la rama principal y configuración del desarrollador; compatibilidad robusta en Windows y Linux; pruebas limpias sin efectos residuales.
+- **Positivas**: Aislamiento hermético de cada ejecución; cero interferencia con la rama principal y configuración del desarrollador; inmunidad contra inyección de argumentos en comandos de Git; compatibilidad robusta en Windows y Linux; pruebas limpias sin efectos residuales.
 - **Negativas**: Requiere que el entorno del sistema disponga del ejecutable `git >= 2.20.0` instalado en el `PATH` (validado preventivamente en `comprobacionesPrevias`).
