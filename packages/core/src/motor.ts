@@ -272,6 +272,19 @@ export class MotorFlujo {
     return this.continuarCon(dirBatuta, runId);
   }
 
+  /**
+   * Registra una aprobación sin continuar (para `--solo-registrar` de la
+   * CLI). Devuelve la pausa si el documento cambió, o null si quedó
+   * registrada y pendiente de `resume`.
+   */
+  async registrarAprobacion(
+    runId: string,
+    dirBatuta: string,
+    puerta: Puerta,
+  ): Promise<ResultadoMotor | null> {
+    return aprobarPuerta(this.deps, dirBatuta, runId, puerta);
+  }
+
   /** Un rechazo termina la ejecución en ABORTED. */
   async rechazar(
     runId: string,

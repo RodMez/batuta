@@ -9,7 +9,8 @@
   "types": "./dist/index.d.ts",
   "dependencies": {
     "@batuta/core": "*",
-    "commander": "^13.1.0"
+    "commander": "^13.1.0",
+    "zod": "^4.6.5"
   },
   "scripts": {
     "build": "tsc -b",
