@@ -44,6 +44,12 @@ export const LimitesSchema = z.strictObject({
   continuaciones_por_subtarea: z.number().int().nonnegative().default(2),
   /** Timeout para los comandos de `preparacion` en segundos (hito 6). */
   timeout_preparacion_seg: z.number().positive().default(600),
+  /**
+   * Tope en dólares por ejecución, opcional y sin valor por defecto.
+   * Solo se aplica cuando los precios de los alias son conocidos;
+   * sin precios solo se controla por tokens (con evento de advertencia).
+   */
+  usd_por_ejecucion: z.number().positive().optional(),
 });
 
 /** Gates humanos H0–H3 (secciones 4 y 7). */

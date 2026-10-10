@@ -921,14 +921,31 @@ export class MotorFlujo {
     progreso: ProgresoMotor,
     inicioIso: string,
     ahoraIso: string,
-  ): string | null {
+  ): { motivo: string; limite: string } | null {
     if (progreso.tokensAcumulados > config.limites.tokens_por_ejecucion) {
-      return `Límite de tokens superado (${progreso.tokensAcumulados} > ${config.limites.tokens_por_ejecucion})`;
+      return {
+        motivo: `Límite de tokens superado (${progreso.tokensAcumulados} > ${config.limites.tokens_por_ejecucion})`,
+        limite: "tokens_por_ejecucion",
+      };
     }
     const minutos =
       (Date.parse(ahoraIso) - Date.parse(inicioIso)) / 60000;
     if (minutos > config.limites.minutos_por_ejecucion) {
-      return `Límite de minutos superado (${minutos.toFixed(1)} > ${config.limites.minutos_por_ejecucion})`;
+      return {
+        motivo: `Límite de minutos superado (${minutos.toFixed(1)} > ${config.limites.minutos_por_ejecucion})`,
+        limite: "minutos_por_ejecucion",
+      };
+    }
+    const topeUsd = config.limites.usd_por_ejecucion;
+    if (
+      topeUsd !== undefined &&
+      !progreso.usdDesconocido &&
+      progreso.usdAcumulado > topeUsd
+    ) {
+      return {
+        motivo: `Límite de dólares por ejecución superado (${progreso.usdAcumulado} > ${topeUsd})`,
+        limite: "usd_por_ejecucion",
+      };
     }
     return null;
   }
@@ -1015,7 +1032,7 @@ export class MotorFlujo {
         this.deps.reloj.ahoraIso(),
       );
       if (limite) {
-        return this.fallarEjecucion(dirBatuta, runId, progreso, limite, "limite_ejecucion");
+        return this.fallarEjecucion(dirBatuta, runId, progreso, limite.motivo, limite.limite);
       }
 
       const esContinuacion = continuacionResumen !== null;
@@ -1131,7 +1148,7 @@ export class MotorFlujo {
         this.deps.reloj.ahoraIso(),
       );
       if (limiteTrasUso) {
-        return this.fallarEjecucion(dirBatuta, runId, progreso, limiteTrasUso, "limite_ejecucion");
+        return this.fallarEjecucion(dirBatuta, runId, progreso, limiteTrasUso.motivo, limiteTrasUso.limite);
       }
 
       if (!resultado.exito || !resultado.output) {

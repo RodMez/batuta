@@ -209,4 +209,22 @@ describe("configuración (CA-1, CA-2, CA-3)", () => {
     expect(conOverride.limites.continuaciones_por_subtarea).toBe(1);
     expect(conOverride.limites.timeout_preparacion_seg).toBe(120);
   });
+
+  it("usd_por_ejecucion es opcional sin valor por defecto", () => {
+    expect(parseBatutaConfig(baseValida()).limites.usd_por_ejecucion).toBeUndefined();
+    const conTope = parseBatutaConfig({
+      ...baseValida(),
+      limites: {
+        intentos_por_subtarea: 3,
+        tokens_por_ejecucion: 1000,
+        minutos_por_ejecucion: 10,
+        lineas_de_diff_max: 100,
+        usd_por_agente: 1,
+        pasos_por_agente: 5,
+        timeout_comando_seg: 30,
+        usd_por_ejecucion: 4.5,
+      },
+    });
+    expect(conTope.limites.usd_por_ejecucion).toBe(4.5);
+  });
 });
