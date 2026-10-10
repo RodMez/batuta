@@ -1,0 +1,12 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "num_turns": 3,
+  "duration_ms": 4200,
+  "usage": {
+    "input_tokens": 1500,
+    "output_tokens": 420
+  },
+  "result": "{\"status\":\"SUCCESS\",\"summary\":\"Implementada subtarea de forma exitosa\",\"files_modified\":[\"src/services/user.ts\"],\"reported_checks\":[{\"command\":\"npm test\",\"exit_code\":0}],\"continuation_notes\":\"\",\"blocking_question\":\"\"}"
+}
