@@ -85,7 +85,7 @@ export interface ProgresoMotor {
   inicioIso: string;
   specHash: string;
   planHash: string;
-  aprobaciones: Record<Puerta, { aprobada: boolean; hash?: string }>;
+  aprobaciones: Record<Puerta, { aprobada: boolean; hash?: string; pendiente?: string }>;
   subtareaIndice: number;
   totalSubtareas: number;
   subtareas: ProgresoSubtarea[];
@@ -605,6 +605,16 @@ export class MotorFlujo {
       tipo: "aprobacion_solicitada",
       payload: { puerta },
     });
+    // Guardar el hash pendiente para detectar cambios antes de aprobar.
+    const progreso = await this.leerProgreso(dirBatuta, runId);
+    if (puerta === "H1") {
+      const spec = await this.deps.fs.leerArchivo(rutaSpec(dirBatuta, runId));
+      progreso.aprobaciones["H1"] = { aprobada: false, pendiente: hashContenido(spec) };
+    } else if (puerta === "H2") {
+      const planTexto = await this.deps.fs.leerArchivo(rutaPlan(dirBatuta, runId));
+      progreso.aprobaciones["H2"] = { aprobada: false, pendiente: hashContenido(planTexto) };
+    }
+    await this.guardarProgreso(dirBatuta, runId, progreso);
     const contenido = await this.textoSolicitud(dirBatuta, runId, config, puerta);
     await this.deps.fs.escribirArchivo(rutaSolicitud(dirBatuta, runId, puerta), contenido);
     await this.deps.notificador.notificar({
@@ -707,11 +717,28 @@ export class MotorFlujo {
     if (puerta === "H1") {
       const spec = await this.deps.fs.leerArchivo(rutaSpec(dirBatuta, runId));
       const hash = hashContenido(spec);
+      const pendiente = progreso.aprobaciones["H1"].pendiente;
+      if (pendiente !== undefined && pendiente !== hash) {
+        // El documento cambió tras solicitar: hay que aprobar de nuevo.
+        progreso.aprobaciones["H1"] = { aprobada: false, pendiente: hash };
+        await this.guardarProgreso(dirBatuta, runId, progreso);
+        const contenido = await this.textoSolicitud(dirBatuta, runId, await this.leerConfig(dirBatuta, runId), puerta);
+        await this.deps.fs.escribirArchivo(rutaSolicitud(dirBatuta, runId, puerta), contenido);
+        return { resultado: "pausa-aprobacion", runId, puerta };
+      }
       payload["hash_spec"] = hash;
       progreso.aprobaciones["H1"] = { aprobada: true, hash };
     } else if (puerta === "H2") {
       const planTexto = await this.deps.fs.leerArchivo(rutaPlan(dirBatuta, runId));
       const hash = hashContenido(planTexto);
+      const pendiente = progreso.aprobaciones["H2"].pendiente;
+      if (pendiente !== undefined && pendiente !== hash) {
+        progreso.aprobaciones["H2"] = { aprobada: false, pendiente: hash };
+        await this.guardarProgreso(dirBatuta, runId, progreso);
+        const contenido = await this.textoSolicitud(dirBatuta, runId, await this.leerConfig(dirBatuta, runId), puerta);
+        await this.deps.fs.escribirArchivo(rutaSolicitud(dirBatuta, runId, puerta), contenido);
+        return { resultado: "pausa-aprobacion", runId, puerta };
+      }
       payload["hash_plan"] = hash;
       progreso.aprobaciones["H2"] = { aprobada: true, hash };
     } else {
