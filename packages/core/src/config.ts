@@ -206,6 +206,7 @@ export const BatutaConfigSchema = z
     ),
     rutas_prohibidas: z.array(z.string().min(1)).default([]),
     specs_en_repo: z.boolean().default(true),
+    directorio_worktrees: z.string().min(1).optional(),
     notificaciones: NotificacionesSchema.default(DEFAULT_NOTIFICACIONES),
   })
   .superRefine((config, ctx) => {
