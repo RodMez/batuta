@@ -1,8 +1,8 @@
 # Batuta: sistema orquestador de agentes de IA
 
-> Diseño v0.15 · Plan cerrado, piloto verificado y plan de codificación · 9 de octubre de 2026
+> Diseño v0.16 · Plan cerrado, piloto verificado y plan de codificación · 9 de octubre de 2026
 > Estado: solo planificación. Todavía no hay código ni lenguaje elegido.
-> Las versiones v0.2 a v0.15 incorporan la comparación con ForgeFlow Harness y las decisiones de ejecución, despliegue y avisos (ver el registro de cambios al final).
+> Las versiones v0.2 a v0.16 incorporan la comparación con ForgeFlow Harness y las decisiones de ejecución, despliegue y avisos (ver el registro de cambios al final).
 
 ## 1. Visión
 
@@ -333,6 +333,7 @@ preparacion:                 # comandos que dejan listo un worktree nuevo (por e
 entorno_gates:               # variables de entorno de prueba para los gates; nunca secretos reales
   CLAVE: valor
 ejecutor: claude-code          # en el MVP todos los roles usan CLI headless
+variables_modelo: [ANTHROPIC_API_KEY]   # nombres de las variables del entorno del usuario que se reenvían a los agentes (nunca sus valores)
 alias_modelos:                # cada alias apunta a un nombre de modelo completo; precios en USD por millón de tokens
   rapido:  { modelo: <completar>, entrada: <completar>, salida: <completar>, ventana: <completar> }
   medio:   { modelo: <completar>, entrada: <completar>, salida: <completar>, ventana: <completar> }
@@ -381,6 +382,7 @@ notificaciones:
 
 - **Límites duros** de intentos, tokens, tiempo y tamaño del diff. Al superarlos la ejecución se detiene y avisa.
 - **Permisos mínimos** para los agentes: lista de comandos permitidos y rutas prohibidas.
+- **Sin interpolación en comandos:** los comandos de Batuta (Git, agentes) se lanzan como ejecutable más lista de argumentos. Ningún texto que pueda venir de un agente (mensajes de commit, referencias, rutas, nombres) se interpola en una línea de comandos. Solo los gates de la configuración, escritos por el usuario, se ejecutan como línea de comandos con shell.
 - **Clasificación de riesgo de comandos:** cada comando se clasifica como bajo, medio o alto. Los de riesgo alto (borrar, `git push`, privilegios elevados) pausan la ejecución hasta que la persona confirme. Con una CLI headless esto depende de la configuración de permisos de la herramienta; si Batuta controla el bucle de herramientas mediante la API, puede interceptar cada comando directamente.
 - **Secretos:** nunca se pasan al contexto de los agentes; la política de diff rechaza cambios que los agreguen.
 - **Aprobaciones humanas** en H0 (presupuesto), H1 (especificación) y H3 (merge) de forma obligatoria al inicio. Se relajan solo con evidencia de que los gates son confiables.
@@ -636,7 +638,8 @@ Los hitos fijan el objetivo y el criterio de terminación. El agente puede propo
 - **Hito 1:** aceptado y fusionado (32 pruebas). Su revisión generó tres ajustes que se resolvieron en el hito 2.
 - **Hito 2:** aceptado y fusionado (9 archivos de prueba, 61 pruebas, CI en verde). Su revisión dejó un ajuste previo para el hito 3: la recuperación automática de bloqueos obsoletos del registro.
 - **Hito 3:** aceptado (91 pruebas, CI en verde en Linux y Windows) tras corregir una prueba de terminación de procesos mal planteada. Se había fusionado en `main` con el CI en rojo y se revirtió, así que se restaura con un PR que revierte el revert y fusiona la rama corregida.
-- **Hito 4:** en preparación.
+- **Hito 4:** aceptado y fusionado (100 pruebas, CI en verde; las pruebas no dejan worktrees ni ramas sobrantes). La revisión encontró un fallo de seguridad: los comandos de Git se arman como texto con el mensaje de commit y las referencias interpolados, y un mensaje con comillas puede inyectar argumentos (se comprobó que `--no-verify` salta un hook que bloquea el commit). Se corrige como primer ajuste del hito 5.
+- **Hito 5:** en preparación.
 
 ### Estrategia de pruebas
 
@@ -684,6 +687,9 @@ Revisores independientes, enrutamiento por complejidad, avisos por Telegram, `ba
 1. **Estrategia de `node_modules` con subtareas en paralelo** (Fase 3), descrita en la sección 18.
 
 ## 21. Registro de cambios
+
+**v0.16**
+- Revisión del hito 4: aceptado con un ajuste obligatorio. Nueva regla en la sección 8: sin interpolación de texto de agentes en líneas de comandos. Nuevo campo `variables_modelo` en la configuración.
 
 **v0.15**
 - Revisión del hito 3: aceptado. Nuevo parámetro `directorio_worktrees` y regla de ubicación de los worktrees (fuera del árbol del repositorio).
