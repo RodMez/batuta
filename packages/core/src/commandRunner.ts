@@ -23,11 +23,24 @@ export interface ResultadoComando {
   error?: string;
 }
 
+/** Opciones para la ejecución de un comando por vector de argumentos. */
+export interface OpcionesEjecucionArgs {
+  cwd?: string;
+  timeoutMs?: number;
+  limiteSalidaBytes?: number;
+  entornoExtra?: Record<string, string>;
+}
+
 /** Interfaz inyectable para el ejecutor de comandos. */
 export interface EjecutorComandos {
   ejecutar(
     comando: string,
     opciones?: OpcionesEjecucionComando,
+  ): Promise<ResultadoComando>;
+  ejecutarArgs(
+    ejecutable: string,
+    args: readonly string[],
+    opciones?: OpcionesEjecucionArgs,
   ): Promise<ResultadoComando>;
 }
 
@@ -241,29 +254,12 @@ export class EjecutorComandosReal implements EjecutorComandos {
     this.timeoutPorDefectoMs = opciones?.timeoutPorDefectoMs ?? 120_000;
   }
 
-  async ejecutar(
-    comando: string,
-    opciones?: OpcionesEjecucionComando,
+  private async lanzarProceso(
+    crearChild: () => ReturnType<typeof spawn>,
+    inicio: number,
+    timeoutMs: number,
+    limiteBytes: number,
   ): Promise<ResultadoComando> {
-    const inicio = Date.now();
-    const cwd = opciones?.cwd;
-
-    if (cwd !== undefined && !existsSync(cwd)) {
-      return {
-        codigoSalida: null,
-        salidaEstandar: "",
-        salidaError: `Directorio de trabajo no existe: ${cwd}`,
-        duracionMs: Date.now() - inicio,
-        timeoutVencido: false,
-        error: `ENOENT: directorio no existe: ${cwd}`,
-      };
-    }
-
-    const timeoutMs = opciones?.timeoutMs ?? this.timeoutPorDefectoMs;
-    const limiteBytes = opciones?.limiteSalidaBytes ?? this.limiteSalidaPorDefecto;
-    const env = construirEntornoLimpio(process.env, opciones?.entornoExtra);
-    const shell = opciones?.shell ?? false;
-
     const bufferStdout = new BufferTruncado(limiteBytes);
     const bufferStderr = new BufferTruncado(limiteBytes);
 
@@ -272,31 +268,9 @@ export class EjecutorComandosReal implements EjecutorComandos {
       let timer: NodeJS.Timeout | null = null;
       let terminado = false;
 
-      // En POSIX detached: true para crear un nuevo grupo de procesos
-      const detached = process.platform !== "win32";
-
       let child;
       try {
-        if (shell) {
-          child = spawn(comando, {
-            cwd,
-            env,
-            shell,
-            detached,
-            windowsHide: true,
-            stdio: ["ignore", "pipe", "pipe"],
-          });
-        } else {
-          const { ejecutable, args } = separarComandoYArgumentos(comando);
-          child = spawn(ejecutable, args, {
-            cwd,
-            env,
-            shell: false,
-            detached,
-            windowsHide: true,
-            stdio: ["ignore", "pipe", "pipe"],
-          });
-        }
+        child = crearChild();
       } catch (error) {
         return resolve({
           codigoSalida: null,
@@ -360,5 +334,103 @@ export class EjecutorComandosReal implements EjecutorComandos {
         finalizar(codigo);
       });
     });
+  }
+
+  async ejecutar(
+    comando: string,
+    opciones?: OpcionesEjecucionComando,
+  ): Promise<ResultadoComando> {
+    const inicio = Date.now();
+    const cwd = opciones?.cwd;
+
+    if (cwd !== undefined && !existsSync(cwd)) {
+      return {
+        codigoSalida: null,
+        salidaEstandar: "",
+        salidaError: `Directorio de trabajo no existe: ${cwd}`,
+        duracionMs: Date.now() - inicio,
+        timeoutVencido: false,
+        error: `ENOENT: directorio no existe: ${cwd}`,
+      };
+    }
+
+    const timeoutMs = opciones?.timeoutMs ?? this.timeoutPorDefectoMs;
+    const limiteBytes = opciones?.limiteSalidaBytes ?? this.limiteSalidaPorDefecto;
+    const env = construirEntornoLimpio(process.env, opciones?.entornoExtra);
+    const shell = opciones?.shell ?? false;
+    const detached = process.platform !== "win32";
+
+    if (shell) {
+      return this.lanzarProceso(
+        () =>
+          spawn(comando, {
+            cwd,
+            env,
+            shell,
+            detached,
+            windowsHide: true,
+            stdio: ["ignore", "pipe", "pipe"],
+          }),
+        inicio,
+        timeoutMs,
+        limiteBytes,
+      );
+    }
+
+    const { ejecutable, args } = separarComandoYArgumentos(comando);
+    return this.lanzarProceso(
+      () =>
+        spawn(ejecutable, args, {
+          cwd,
+          env,
+          shell: false,
+          detached,
+          windowsHide: true,
+          stdio: ["ignore", "pipe", "pipe"],
+        }),
+      inicio,
+      timeoutMs,
+      limiteBytes,
+    );
+  }
+
+  async ejecutarArgs(
+    ejecutable: string,
+    args: readonly string[],
+    opciones?: OpcionesEjecucionArgs,
+  ): Promise<ResultadoComando> {
+    const inicio = Date.now();
+    const cwd = opciones?.cwd;
+
+    if (cwd !== undefined && !existsSync(cwd)) {
+      return {
+        codigoSalida: null,
+        salidaEstandar: "",
+        salidaError: `Directorio de trabajo no existe: ${cwd}`,
+        duracionMs: Date.now() - inicio,
+        timeoutVencido: false,
+        error: `ENOENT: directorio no existe: ${cwd}`,
+      };
+    }
+
+    const timeoutMs = opciones?.timeoutMs ?? this.timeoutPorDefectoMs;
+    const limiteBytes = opciones?.limiteSalidaBytes ?? this.limiteSalidaPorDefecto;
+    const env = construirEntornoLimpio(process.env, opciones?.entornoExtra);
+    const detached = process.platform !== "win32";
+
+    return this.lanzarProceso(
+      () =>
+        spawn(ejecutable, [...args], {
+          cwd,
+          env,
+          shell: false,
+          detached,
+          windowsHide: true,
+          stdio: ["ignore", "pipe", "pipe"],
+        }),
+      inicio,
+      timeoutMs,
+      limiteBytes,
+    );
   }
 }

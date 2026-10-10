@@ -123,6 +123,7 @@ export {
 } from "./commandRunner.js";
 export type {
   EjecutorComandos,
+  OpcionesEjecucionArgs,
   OpcionesEjecucionComando,
   ResultadoComando,
 } from "./commandRunner.js";

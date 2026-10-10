@@ -243,4 +243,14 @@ describe("EjecutorComandosReal", () => {
     expect(res.codigoSalida).toBe(0);
     expect(res.salidaEstandar.trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
+
+  it("ejecutarArgs ejecuta por vector de argumentos preservando comillas y caracteres especiales exactamente (Hito 5 Ajuste)", async () => {
+    const argumentoEspecial = 'arg con "comillas dobles", \'simples\', \\ y saltos\nde\nlinea';
+    const res = await ejecutor.ejecutarArgs(
+      process.execPath,
+      ["-e", "process.stdout.write(process.argv[1])", argumentoEspecial],
+    );
+    expect(res.codigoSalida).toBe(0);
+    expect(res.salidaEstandar).toBe(argumentoEspecial);
+  });
 });
