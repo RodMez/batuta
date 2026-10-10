@@ -183,4 +183,30 @@ describe("configuración (CA-1, CA-2, CA-3)", () => {
       parseBatutaConfig({ ...baseValida(), campo_extra: 1 }),
     ).toThrow(/campo_extra/);
   });
+
+  it("los nuevos límites del hito 6 tienen valor por defecto y aceptan override", () => {
+    const config = parseBatutaConfig(baseValida());
+    expect(config.limites.preguntas_bloqueantes).toBe(3);
+    expect(config.limites.continuaciones_por_subtarea).toBe(2);
+    expect(config.limites.timeout_preparacion_seg).toBe(600);
+
+    const conOverride = parseBatutaConfig({
+      ...baseValida(),
+      limites: {
+        intentos_por_subtarea: 3,
+        tokens_por_ejecucion: 1000,
+        minutos_por_ejecucion: 10,
+        lineas_de_diff_max: 100,
+        usd_por_agente: 1,
+        pasos_por_agente: 5,
+        timeout_comando_seg: 30,
+        preguntas_bloqueantes: 5,
+        continuaciones_por_subtarea: 1,
+        timeout_preparacion_seg: 120,
+      },
+    });
+    expect(conOverride.limites.preguntas_bloqueantes).toBe(5);
+    expect(conOverride.limites.continuaciones_por_subtarea).toBe(1);
+    expect(conOverride.limites.timeout_preparacion_seg).toBe(120);
+  });
 });

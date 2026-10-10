@@ -38,6 +38,12 @@ export const LimitesSchema = z.strictObject({
   usd_por_agente: z.number().positive(),
   pasos_por_agente: z.number().int().positive(),
   timeout_comando_seg: z.number().positive(),
+  /** Máximo de preguntas bloqueantes por ejecución (sección 4, hito 6). */
+  preguntas_bloqueantes: z.number().int().positive().default(3),
+  /** Máximo de continuaciones por subtarea (sección 5, hito 6). */
+  continuaciones_por_subtarea: z.number().int().nonnegative().default(2),
+  /** Timeout para los comandos de `preparacion` en segundos (hito 6). */
+  timeout_preparacion_seg: z.number().positive().default(600),
 });
 
 /** Gates humanos H0–H3 (secciones 4 y 7). */
@@ -126,6 +132,9 @@ const DEFAULT_LIMITES: {
   usd_por_agente: number;
   pasos_por_agente: number;
   timeout_comando_seg: number;
+  preguntas_bloqueantes: number;
+  continuaciones_por_subtarea: number;
+  timeout_preparacion_seg: number;
 } = {
   intentos_por_subtarea: 3,
   tokens_por_ejecucion: 2_000_000,
@@ -134,6 +143,9 @@ const DEFAULT_LIMITES: {
   usd_por_agente: 2,
   pasos_por_agente: 15,
   timeout_comando_seg: 120,
+  preguntas_bloqueantes: 3,
+  continuaciones_por_subtarea: 2,
+  timeout_preparacion_seg: 600,
 };
 
 const DEFAULT_APROBACIONES: {

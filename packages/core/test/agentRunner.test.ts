@@ -705,4 +705,21 @@ describe("cargarPlantillaPrompt", () => {
     expect(promptArch).toContain("SOLO LECTURA");
     expect(promptArch).not.toContain("{{subtarea}}");
   });
+
+  it("carga la plantilla del debugger con el informe de fallo", async () => {
+    const promptDbg = await cargarPlantillaPrompt("debugger", {
+      subtarea: "SUB-07: Corregir bucle",
+      spec: "SPEC-002",
+      reglas_repo: "Reglas",
+      archivos_permitidos: "src/bucle.ts",
+      informe_fallo: "gate tests falló con salida 1",
+      esquema_salida: '{"type":"object"}',
+    });
+
+    expect(promptDbg).toContain("SUB-07: Corregir bucle");
+    expect(promptDbg).toContain("gate tests falló con salida 1");
+    expect(promptDbg).toContain("NEEDS_INPUT");
+    expect(promptDbg).not.toContain("{{informe_fallo}}");
+    expect(promptDbg).not.toContain("{{subtarea}}");
+  });
 });
