@@ -162,24 +162,34 @@ describe("motor reanudación y minutos", () => {
     } catch {}
   }
 
-  it("CA-13 a mitad de implementar: el intento interrumpido no cuenta y el final es igual", async () => {
+  it("CA-13 a mitad de implementar con H0/H1/H3: el intento no cuenta y el final es igual", async () => {
     const { base, repoDir } = await crearRepo();
-    const config = configBase();
+    const config = configBase({
+      aprobaciones: { H0_inicio: true, H1_spec: true, H2_plan: false, H3_merge: true },
+    });
     config.proyecto = repoDir;
 
-    // Referencia limpia sin interrupción.
+    // Referencia limpia sin interrupción (H0 → H1 → subtarea → H3 → DONE).
     const runnerLimpio = new RunnerGuionado(async (_n, _input, contexto) => {
       await writeFile(join(contexto.directorioTrabajo, "a.txt"), "contenido final\n", "utf8");
       return resultadoExito("ok", ["a.txt"]);
     });
     const mLimpio = crearMotor(base, runnerLimpio);
-    const rLimpio = await mLimpio.motor.iniciar({
+    const iLimpio = await mLimpio.motor.iniciar({
       config, specContenido: "s", planContenido: PLAN_UNA, reglasRepo: "R",
       directorioRepo: repoDir, dirBatuta: mLimpio.dirBatuta,
     });
-    expect(rLimpio.resultado).toBe("terminada");
-    const contenidoLimpio = await contenidoFinal(mLimpio.dirBatuta, rLimpio.runId);
-    await limpiar(base, mLimpio.dirBatuta, rLimpio.runId);
+    expect(iLimpio.resultado).toBe("pausa-aprobacion");
+    const trasH0 = await mLimpio.motor.aprobar(iLimpio.runId, mLimpio.dirBatuta, "H0");
+    expect(trasH0.resultado).toBe("pausa-aprobacion");
+    const trasH1 = await mLimpio.motor.aprobar(iLimpio.runId, mLimpio.dirBatuta, "H1");
+    expect(trasH1.resultado).toBe("pausa-aprobacion");
+    if (trasH1.resultado !== "pausa-aprobacion") throw new Error("H3");
+    expect(trasH1.puerta).toBe("H3");
+    const finLimpio = await mLimpio.motor.aprobar(iLimpio.runId, mLimpio.dirBatuta, "H3");
+    expect(finLimpio.resultado).toBe("terminada");
+    const contenidoLimpio = await contenidoFinal(mLimpio.dirBatuta, iLimpio.runId);
+    await limpiar(base, mLimpio.dirBatuta, iLimpio.runId);
 
     // Con interrupción en la primera llamada al runner.
     let fallos = 0;
@@ -203,21 +213,25 @@ describe("motor reanudación y minutos", () => {
       fs: sistemaArchivosNode,
     });
     let runId = "";
+    const i2 = await motor2.iniciar({
+      config, specContenido: "s", planContenido: PLAN_UNA, reglasRepo: "R",
+      directorioRepo: repoDir, dirBatuta: dirBatuta2,
+    });
+    expect(i2.resultado).toBe("pausa-aprobacion");
+    runId = i2.runId;
+    await motor2.aprobar(runId, dirBatuta2, "H0");
     try {
-      const r = await motor2.iniciar({
-        config, specContenido: "s", planContenido: PLAN_UNA, reglasRepo: "R",
-        directorioRepo: repoDir, dirBatuta: dirBatuta2,
-      });
-      runId = r.runId;
+      await motor2.aprobar(runId, dirBatuta2, "H1");
+      throw new Error("debió interrumpirse a mitad de implementar");
     } catch (e) {
-      // Recuperar el runId creado antes de la caída.
-      const { readdir } = await import("node:fs/promises");
-      const runs = await readdir(join(dirBatuta2, "runs"));
-      runId = runs[0]!;
       expect(String(e)).toMatch(/caída simulada/);
     }
     const r2 = await motor2.reanudar(runId, dirBatuta2);
-    expect(r2.resultado).toBe("terminada");
+    expect(r2.resultado).toBe("pausa-aprobacion");
+    if (r2.resultado !== "pausa-aprobacion") throw new Error("H3 tras reanudar");
+    expect(r2.puerta).toBe("H3");
+    const fin2 = await motor2.aprobar(runId, dirBatuta2, "H3");
+    expect(fin2.resultado).toBe("terminada");
     expect(await contenidoFinal(dirBatuta2, runId)).toBe(contenidoLimpio);
     const prog = JSON.parse(await readFile(join(dirBatuta2, "runs", runId, "motor.json"), "utf8")) as { subtareas: Array<{ intentos: number }> };
     expect(prog.subtareas[0]?.intentos).toBe(0);

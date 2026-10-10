@@ -333,6 +333,32 @@ describe("motor avanzado", () => {
     if (rUsd.resultado === "fallida") expect(rUsd.motivo).toMatch(/dólar/i);
     await limpiar(base, mUsd.dirBatuta, rUsd.runId);
 
+    // Tope por ejecución con precios conocidos.
+    const configTot = configBase({
+      limites: {
+        intentos_por_subtarea: 3, tokens_por_ejecucion: 1_000_000, minutos_por_ejecucion: 120,
+        lineas_de_diff_max: 800, usd_por_agente: 2, pasos_por_agente: 5, timeout_comando_seg: 60,
+        preguntas_bloqueantes: 3, continuaciones_por_subtarea: 2, timeout_preparacion_seg: 60,
+        usd_por_ejecucion: 0.000001,
+      },
+    });
+    configTot.proyecto = repoDir;
+    const runnerTot = new RunnerGuionado(async (_n, _input, contexto) => {
+      await writeFile(join(contexto.directorioTrabajo, "a.txt"), "x\n", "utf8");
+      return resultadoExito("x", ["a.txt"]);
+    });
+    const mTot = crearMotor(base, runnerTot);
+    const rTot = await mTot.motor.iniciar({
+      config: configTot, specContenido: "s", planContenido: PLAN_UNA, reglasRepo: "R",
+      directorioRepo: repoDir, dirBatuta: mTot.dirBatuta,
+    });
+    expect(rTot.resultado).toBe("fallida");
+    if (rTot.resultado === "fallida") expect(rTot.motivo).toMatch(/dólar/i);
+    const lecTot = await mTot.store.leer(rTot.runId);
+    const evTot = lecTot.eventos.find((e) => e.tipo === "limite_alcanzado");
+    expect(evTot?.payload["limite"]).toBe("usd_por_ejecucion");
+    await limpiar(base, mTot.dirBatuta, rTot.runId);
+
     // Sin precios: solo tokens + evento de advertencia, termina bien.
     const configSin = parseBatutaConfig({
       proyecto: repoDir,
@@ -442,6 +468,11 @@ describe("motor avanzado", () => {
     expect(resumen).toMatch(/tests/);
     expect(resumen).toMatch(/software-engineer/);
     expect(resumen).toMatch(/Duración/);
+    // El hash del commit de cada subtarea figura y coincide con motor.json.
+    const progSum = JSON.parse(await readFile(join(dirBatuta, "runs", r0.runId, "motor.json"), "utf8")) as { subtareas: Array<{ commit: string }> };
+    const hash = progSum.subtareas[0]?.commit;
+    expect(hash).toMatch(/^[0-9a-f]{40}$/);
+    expect(resumen).toContain(hash!);
     await limpiar(base, dirBatuta, r0.runId);
   }, 60000);
 });

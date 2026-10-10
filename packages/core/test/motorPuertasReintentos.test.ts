@@ -345,4 +345,151 @@ describe("motor puertas y reintentos", () => {
     expect(existsSync(join(prog.worktree.ruta, ".env"))).toBe(false);
     await limpiarWorktree(base, dirBatuta, r0.runId);
   }, 60000);
+
+  it("H2 activada: pausa, aprobación y continuación hasta DONE", async () => {
+    const { base, repoDir } = await crearRepo();
+    const runner = new RunnerGuionado(async (_n, _input, contexto) => {
+      await writeFile(join(contexto.directorioTrabajo, "a.txt"), "ok\n", "utf8");
+      return resultadoExito("hecho", ["a.txt"]);
+    });
+    const { motor, store, dirBatuta } = crearMotor(base, runner);
+    const config = configBase({
+      aprobaciones: { H0_inicio: false, H1_spec: true, H2_plan: true, H3_merge: false },
+    });
+    config.proyecto = repoDir;
+
+    const r0 = await motor.iniciar({
+      config, specContenido: "s", planContenido: PLAN_UNA, reglasRepo: "R",
+      directorioRepo: repoDir, dirBatuta,
+    });
+    expect(r0.resultado).toBe("pausa-aprobacion");
+    if (r0.resultado !== "pausa-aprobacion") throw new Error("H1");
+    const runId = r0.runId;
+
+    const r1 = await motor.aprobar(runId, dirBatuta, "H1");
+    expect(r1.resultado).toBe("pausa-aprobacion");
+    if (r1.resultado !== "pausa-aprobacion") throw new Error("H2");
+    expect(r1.puerta).toBe("H2");
+    expect(existsSync(join(dirBatuta, "runs", runId, "aprobacion-H2.md"))).toBe(true);
+
+    const r2 = await motor.aprobar(runId, dirBatuta, "H2");
+    expect(r2.resultado).toBe("terminada");
+    expect((await store.estado(runId)).estado).toBe("DONE");
+    await limpiarWorktree(base, dirBatuta, runId);
+  }, 60000);
+
+  it("H2 activada: cambio de plan.json mientras está pausada pide aprobar de nuevo", async () => {
+    const { base, repoDir } = await crearRepo();
+    const runner = new RunnerGuionado(async (_n, _input, contexto) => {
+      await writeFile(join(contexto.directorioTrabajo, "a.txt"), "ok\n", "utf8");
+      return resultadoExito("hecho", ["a.txt"]);
+    });
+    const { motor, store, dirBatuta } = crearMotor(base, runner);
+    const config = configBase({
+      aprobaciones: { H0_inicio: false, H1_spec: false, H2_plan: true, H3_merge: false },
+    });
+    config.proyecto = repoDir;
+
+    const r0 = await motor.iniciar({
+      config, specContenido: "s", planContenido: PLAN_UNA, reglasRepo: "R",
+      directorioRepo: repoDir, dirBatuta,
+    });
+    expect(r0.resultado).toBe("pausa-aprobacion");
+    if (r0.resultado !== "pausa-aprobacion") throw new Error("H2");
+    const runId = r0.runId;
+
+    const planV2 = {
+      subtareas: [
+        { id: "SUB-01", titulo: "Unica v2", archivos: ["a.txt"], criterios: ["c1"], complejidad: "baja" },
+      ],
+    };
+    await writeFile(join(dirBatuta, "runs", runId, "plan.json"), `${JSON.stringify(planV2, null, 2)}\n`, "utf8");
+    const r1 = await motor.aprobar(runId, dirBatuta, "H2");
+    expect(r1.resultado).toBe("pausa-aprobacion");
+    if (r1.resultado !== "pausa-aprobacion") throw new Error("re-H2");
+    expect(r1.puerta).toBe("H2");
+    const r2 = await motor.aprobar(runId, dirBatuta, "H2");
+    expect(r2.resultado).toBe("terminada");
+    expect((await store.estado(runId)).estado).toBe("DONE");
+    await limpiarWorktree(base, dirBatuta, runId);
+  }, 60000);
+
+  it("H2 activada: un rechazo termina en ABORTED y limpia", async () => {
+    const { base, repoDir } = await crearRepo();
+    const ejecutor = new EjecutorComandosReal();
+    const head0 = (await ejecutor.ejecutar("git rev-parse HEAD", { cwd: repoDir })).salidaEstandar.trim();
+    const runner = new RunnerGuionado(async () => resultadoExito());
+    const { motor, store, dirBatuta } = crearMotor(base, runner);
+    const config = configBase({
+      aprobaciones: { H0_inicio: false, H1_spec: false, H2_plan: true, H3_merge: false },
+    });
+    config.proyecto = repoDir;
+    const r0 = await motor.iniciar({
+      config, specContenido: "s", planContenido: PLAN_UNA, reglasRepo: "R",
+      directorioRepo: repoDir, dirBatuta,
+    });
+    if (r0.resultado !== "pausa-aprobacion") throw new Error("H2");
+    const runId = r0.runId;
+    const prog = JSON.parse(await readFile(join(dirBatuta, "runs", runId, "motor.json"), "utf8")) as { worktree: { ruta: string } };
+    const rej = await motor.rechazar(runId, dirBatuta, "H2", "plan insuficiente");
+    expect(rej.resultado).toBe("abortada");
+    expect((await store.estado(runId)).estado).toBe("ABORTED");
+    expect(existsSync(prog.worktree.ruta)).toBe(false);
+    const head1 = (await ejecutor.ejecutar("git rev-parse HEAD", { cwd: repoDir })).salidaEstandar.trim();
+    expect(head1).toBe(head0);
+  }, 60000);
+
+  it("H2 activada: interrupción en PLAN reanuda pidiendo H2", async () => {
+    const { base, repoDir } = await crearRepo();
+    const runner = new RunnerGuionado(async (_n, _input, contexto) => {
+      await writeFile(join(contexto.directorioTrabajo, "a.txt"), "ok\n", "utf8");
+      return resultadoExito("hecho", ["a.txt"]);
+    });
+    const dirBatuta = join(base, "data");
+    const reloj = crearRelojFijo();
+    const store = new RunStore(dirBatuta, sistemaArchivosNode, reloj);
+    const motor = new MotorFlujo({
+      runner, git: new ModuloGitReal(new EjecutorComandosReal()),
+      ejecutor: new EjecutorComandosReal(), store, reloj,
+      notificador: new NotificadorNulo(), fs: sistemaArchivosNode,
+    });
+    const config = configBase({
+      aprobaciones: { H0_inicio: false, H1_spec: false, H2_plan: true, H3_merge: false },
+    });
+    config.proyecto = repoDir;
+
+    const realAgregar = store.agregar.bind(store);
+    let roto = false;
+    (store as unknown as { agregar: unknown }).agregar = async (rid: string, ev: never) => {
+      const res = await realAgregar(rid, ev as never);
+      const e = ev as { tipo?: string };
+      if (!roto && e.tipo === "plan_creado") {
+        roto = true;
+        throw new Error("caída simulada justo después de emitir el plan");
+      }
+      return res;
+    };
+    let runId = "";
+    try {
+      const r = await motor.iniciar({
+        config, specContenido: "s", planContenido: PLAN_UNA, reglasRepo: "R",
+        directorioRepo: repoDir, dirBatuta,
+      });
+      runId = r.runId;
+    } catch (e) {
+      const { readdir } = await import("node:fs/promises");
+      runId = (await readdir(join(dirBatuta, "runs")))[0]!;
+      expect(String(e)).toMatch(/caída simulada/);
+    }
+    (store as unknown as { agregar: unknown }).agregar = realAgregar;
+
+    const r2 = await motor.reanudar(runId, dirBatuta);
+    expect(r2.resultado).toBe("pausa-aprobacion");
+    if (r2.resultado !== "pausa-aprobacion") throw new Error("H2 tras reanudar");
+    expect(r2.puerta).toBe("H2");
+    const r3 = await motor.aprobar(runId, dirBatuta, "H2");
+    expect(r3.resultado).toBe("terminada");
+    expect((await store.estado(runId)).estado).toBe("DONE");
+    await limpiarWorktree(base, dirBatuta, runId);
+  }, 90000);
 });
