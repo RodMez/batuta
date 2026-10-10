@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -438,6 +438,147 @@ describe("ModuloGitReal", () => {
     await git.eliminarWorktree(wt2.ruta);
     await ejecutor.ejecutar("git branch -D batuta/run-sin-worktree", {
       cwd: repoDir,
+    });
+  });
+
+  describe("pruebas de seguridad contra inyección de argumentos (Ajuste Hito 4)", () => {
+    it("mensaje con comillas, saltos de línea y barras invertidas se guarda tal cual en el commit", async () => {
+      const { repoDir, git } = await crearRepoTemporal("msg-chars");
+      const info = await git.crearWorktree(repoDir, "run-msg");
+      const ejecutor = new EjecutorComandosReal();
+
+      const mensajeComplejo =
+        'subtarea con "comillas dobles", \'simples\', \\ barras invertidas y\nsaltos\nde\nlinea';
+
+      await writeFile(join(info.ruta, "fichero.txt"), "prueba contenido", "utf8");
+      const res = await git.confirmarSubtarea(info.ruta, mensajeComplejo);
+      expect(res.creado).toBe(true);
+
+      const resLog = await ejecutor.ejecutarArgs("git", ["log", "-1", "--format=%B"], {
+        cwd: info.ruta,
+      });
+      // El mensaje debe conservarse exactamente
+      expect(resLog.salidaEstandar.trim()).toBe(mensajeComplejo.trim());
+
+      await git.eliminarWorktree(info.ruta);
+    });
+
+    it("un hook de pre-commit bloqueante sigue bloqueando aunque el mensaje intente inyectar --no-verify", async () => {
+      const { repoDir, git } = await crearRepoTemporal("precommit-hook");
+      const info = await git.crearWorktree(repoDir, "run-hook");
+
+      // Instalar un pre-commit hook bloqueante en el repositorio principal
+      // En Git los worktrees comparten los hooks de .git/hooks del repo común
+      const hooksDir = join(repoDir, ".git", "hooks");
+      await mkdir(hooksDir, { recursive: true });
+      const hookPath = join(hooksDir, "pre-commit");
+      await writeFile(hookPath, "#!/bin/sh\necho 'Hook pre-commit bloqueando commit' >&2\nexit 1\n", "utf8");
+      await chmod(hookPath, 0o755);
+
+      await writeFile(join(info.ruta, "archivo.txt"), "codigo", "utf8");
+
+      // Intento de inyección: un mensaje que contiene --no-verify para burlar el hook
+      const mensajeInyeccion = 'subtarea" --no-verify -m "extra';
+
+      // Debe fallar porque --no-verify se pasa como argumento de -m y no como opción de git
+      await expect(
+        git.confirmarSubtarea(info.ruta, mensajeInyeccion),
+      ).rejects.toThrow();
+
+      // Desactivar el hook para permitir limpieza limpia
+      await rm(hookPath, { force: true });
+      await git.eliminarWorktree(info.ruta);
+    });
+
+    it("referencia base hostil que empieza por '-' o contiene comillas se rechaza o se trata como dato", async () => {
+      const { repoDir, git } = await crearRepoTemporal("ref-hostil");
+
+      // 1. En comprobaciones previas
+      const previaDash = await git.comprobacionesPrevias(repoDir, "-v");
+      expect(previaDash.referenciaExiste).toBe(false);
+
+      const previaHelp = await git.comprobacionesPrevias(repoDir, "--help");
+      expect(previaHelp.referenciaExiste).toBe(false);
+
+      const previaInyeccion = await git.comprobacionesPrevias(
+        repoDir,
+        'HEAD" && echo inyectado',
+      );
+      expect(previaInyeccion.referenciaExiste).toBe(false);
+
+      // 2. En crearWorktree se rechaza con error
+      await expect(
+        git.crearWorktree(repoDir, "wt-hostil1", { refBase: "-v" }),
+      ).rejects.toThrow(/no es válida|no existe/i);
+
+      await expect(
+        git.crearWorktree(repoDir, "wt-hostil2", { refBase: "--no-verify" }),
+      ).rejects.toThrow(/no es válida|no existe/i);
+
+      await expect(
+        git.crearWorktree(repoDir, "wt-hostil3", { refBase: 'HEAD" && echo' }),
+      ).rejects.toThrow(/no existe/i);
+    });
+
+    it("identidad de autor con comillas no altera el comando y se registra exactamente", async () => {
+      const { repoDir, git } = await crearRepoTemporal("identidad-quotes");
+      const info = await git.crearWorktree(repoDir, "run-identidad");
+      const ejecutor = new EjecutorComandosReal();
+
+      await writeFile(join(info.ruta, "autor.txt"), "contenido", "utf8");
+      const nombreHostil = 'Autor "Con Comillas" O\'Connor';
+      const emailHostil = 'autor"test"@example.com';
+
+      await git.confirmarSubtarea(info.ruta, "commit de prueba", {
+        nombre: nombreHostil,
+        email: emailHostil,
+      });
+
+      const resNombre = await ejecutor.ejecutarArgs(
+        "git",
+        ["log", "-1", "--format=%an"],
+        { cwd: info.ruta },
+      );
+      expect(resNombre.salidaEstandar.trim()).toBe(nombreHostil);
+
+      const resEmail = await ejecutor.ejecutarArgs(
+        "git",
+        ["log", "-1", "--format=%ae"],
+        { cwd: info.ruta },
+      );
+      expect(resEmail.salidaEstandar.trim()).toBe(emailHostil);
+
+      await git.eliminarWorktree(info.ruta);
+    });
+
+    it("rutas con espacios se manejan correctamente en confirmación y listado de cambios", async () => {
+      const { repoDir, git } = await crearRepoTemporal("rutas-espacios");
+      const info = await git.crearWorktree(repoDir, "run-espacios");
+
+      const dirEspacios = join(info.ruta, "carpeta con espacios");
+      await mkdir(dirEspacios, { recursive: true });
+      await writeFile(
+        join(dirEspacios, "archivo con espacios.txt"),
+        "linea 1\nlinea 2\n",
+        "utf8",
+      );
+
+      const resCommit = await git.confirmarSubtarea(
+        info.ruta,
+        "commit con espacios en ruta",
+      );
+      expect(resCommit.creado).toBe(true);
+
+      const cambios = await git.listarCambios(info.ruta, {
+        commitBase: info.commitBase,
+      });
+      const archivo = cambios.find(
+        (c) => c.ruta === "carpeta con espacios/archivo con espacios.txt",
+      );
+      expect(archivo).toBeDefined();
+      expect(archivo?.lineasAnadidas).toBe(2);
+
+      await git.eliminarWorktree(info.ruta);
     });
   });
 });
