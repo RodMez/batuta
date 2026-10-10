@@ -285,7 +285,13 @@ export class MotorFlujo {
   /** Aborta: termina en ABORTED, elimina worktree y rama, la principal queda intacta. */
   async abortar(runId: string, dirBatuta: string): Promise<ResultadoMotor> {
     const estado = await this.deps.store.estado(runId);
-    if (estado.estado !== "ABORTED") {
+    // En ejecuciones ya terminales (DONE/FAILED/ABORTED) no hay evento que
+    // emitir: solo se limpia el worktree y la rama.
+    if (
+      estado.estado !== "ABORTED" &&
+      estado.estado !== "DONE" &&
+      estado.estado !== "FAILED"
+    ) {
       await this.deps.store.agregar(runId, {
         tipo: "ejecucion_abortada",
         payload: { motivo: "abortada por la persona" },
