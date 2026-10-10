@@ -189,7 +189,6 @@ describe("motor reanudación y minutos", () => {
       await writeFile(join(contexto.directorioTrabajo, "a.txt"), "contenido final\n", "utf8");
       return resultadoExito("ok tras reanudar", ["a.txt"]);
     });
-    const mRoto = crearMotor(base, runnerRoto);
     // dirBatuta distinto para no chocar runIds: usa subcarpeta propia.
     const dirBatuta2 = join(base, "data2");
     const reloj2 = crearRelojFijo();
