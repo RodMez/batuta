@@ -145,6 +145,7 @@ export {
   detectarSecretoEnLinea,
   evaluarDiff,
   normalizarRutaDiff,
+  ofuscarSecretos,
 } from "./diffPolicy.js";
 export type {
   CambioArchivo,
@@ -172,3 +173,23 @@ export type {
   WorktreeListado,
   WorktreesHuerfanos,
 } from "./git.js";
+export {
+  calcularCostoEstimado,
+  cargarPlantillaPrompt,
+  ClaudeCodeRunner,
+  construirInvocacionClaudeCode,
+  FakeRunner,
+  parsearSalidaClaudeCode,
+  verificarPreflightClaudeCode,
+} from "./agentRunner.js";
+export type {
+  AgentCallContext,
+  AgentRunner,
+  AgentRunResult,
+  CostoEstimado,
+  InvocacionClaudeCodeParams,
+  LimitesLlamada,
+  MotivoFalloAgente,
+  PermisosRol,
+  UsoAgente,
+} from "./agentRunner.js";
