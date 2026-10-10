@@ -1,4 +1,4 @@
-import { readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +13,7 @@ import {
   ClaudeCodeRunner,
   construirInvocacionClaudeCode,
   EjecutorComandos,
+  EjecutorComandosReal,
   FakeRunner,
   ofuscarSecretos,
   parsearSalidaClaudeCode,
@@ -143,8 +144,10 @@ describe("construirInvocacionClaudeCode (CA-3)", () => {
 
     expect(ejecutable).toBe("claude");
     expect(args).toContain("--print");
+    expect(args).toContain("--verbose");
     expect(args).toContain("--output-format");
-    expect(args).toContain("json");
+    expect(args).toContain("stream-json");
+    expect(args).toContain("--bare");
     expect(args).toContain("--model");
     expect(args).toContain("claude-3-7-sonnet-20250219");
     expect(args).toContain("--max-budget-usd");
@@ -167,6 +170,12 @@ describe("construirInvocacionClaudeCode (CA-3)", () => {
       },
     });
 
+    // Herramientas disponibles definidas con --tools
+    expect(args).toContain("--tools");
+    const toolsArg = args[args.indexOf("--tools") + 1];
+    expect(toolsArg).toBe("Bash,Edit,Write,Read,Grep,Glob");
+
+    // Y además restringidas con --allowed-tools
     expect(args).toContain("--allowed-tools");
     const allowedToolsArg = args[args.indexOf("--allowed-tools") + 1];
     expect(allowedToolsArg).toMatch(/Read/);
@@ -175,13 +184,17 @@ describe("construirInvocacionClaudeCode (CA-3)", () => {
     expect(allowedToolsArg).toMatch(/Bash\(npm run lint\)/);
   });
 
-  it("construye invocación con esquema estructurado AgentOutput", () => {
+  it("construye invocación con esquema estructurado AgentOutput y prompt de sistema", () => {
     const { args } = construirInvocacionClaudeCode({
       modelo: "claude-3-5-haiku-20241022",
       prompt: "Ejecuta y responde",
+      promptSistema: "Reglas estrictas del repositorio",
       permisos: { soloLectura: true },
       esquemaJson: AgentOutputJsonSchema,
     });
+
+    expect(args).toContain("--append-system-prompt");
+    expect(args).toContain("Reglas estrictas del repositorio");
 
     expect(args).toContain("--json-schema");
     const schemaIdx = args.indexOf("--json-schema");
@@ -448,6 +461,55 @@ describe("ClaudeCodeRunner reintentos y límites (CA-5, CA-6, CA-7, CA-8, CA-9)"
     if (existsSync(res.rutaLog)) {
       await rm(res.rutaLog, { force: true });
     }
+  });
+
+  it("termina el árbol de procesos y devuelve turnos_agotados mientras corre si las líneas de streaming superan max_steps (CA-8)", async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), "batuta-stream-test-"));
+    const scriptPath = join(tmpDir, "mock-stream.cjs");
+
+    // Script que emite eventos de streaming con pausas para simular ejecución continua
+    const scriptCode = `
+      async function main() {
+        console.log(JSON.stringify({ type: "system", subtype: "init" }));
+        for (let i = 1; i <= 6; i++) {
+          await new Promise((r) => setTimeout(r, 60));
+          console.log(JSON.stringify({
+            type: "assistant",
+            message: { role: "assistant", content: [{ type: "text", text: "turno " + i }] }
+          }));
+        }
+        console.log(JSON.stringify({
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          num_turns: 6,
+          result: JSON.stringify({ status: "SUCCESS", summary: "terminado tarde" })
+        }));
+      }
+      main();
+    `;
+    await writeFile(scriptPath, scriptCode, "utf8");
+
+    const ejecutorReal = new EjecutorComandosReal();
+    const ejecutorStream: EjecutorComandos = {
+      ejecutar: (cmd, opts) => ejecutorReal.ejecutar(cmd, opts),
+      ejecutarArgs: (_bin, _args, opts) =>
+        ejecutorReal.ejecutarArgs(process.execPath, [scriptPath], opts),
+    };
+
+    const runner = new ClaudeCodeRunner(ejecutorStream);
+    const input = crearInputPrueba({ max_steps: 2 });
+    const res = await runner.ejecutar(input, crearContextoPrueba());
+
+    expect(res.exito).toBe(false);
+    expect(res.motivoFallo).toBe("turnos_agotados");
+    expect(res.output).toBeNull();
+    expect(res.uso.turnos).toBeGreaterThanOrEqual(2);
+
+    if (existsSync(res.rutaLog)) {
+      await rm(res.rutaLog, { force: true });
+    }
+    await rm(tmpDir, { recursive: true, force: true });
   });
 
   it("el registro de la llamada oculta patrones de claves y secretos conocidos (CA-9)", async () => {

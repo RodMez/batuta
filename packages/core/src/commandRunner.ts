@@ -9,6 +9,7 @@ export interface OpcionesEjecucionComando {
   limiteSalidaBytes?: number;
   entornoExtra?: Record<string, string>;
   shell?: boolean | string;
+  onStdoutLine?: (linea: string, abortar: (motivo?: string) => void) => void;
 }
 
 /** Resultado estructurado de la ejecución de un comando. */
@@ -18,6 +19,7 @@ export interface ResultadoComando {
   salidaError: string;
   duracionMs: number;
   timeoutVencido: boolean;
+  canceladoPor?: string;
   bytesDescartadosStdout?: number;
   bytesDescartadosStderr?: number;
   error?: string;
@@ -29,6 +31,7 @@ export interface OpcionesEjecucionArgs {
   timeoutMs?: number;
   limiteSalidaBytes?: number;
   entornoExtra?: Record<string, string>;
+  onStdoutLine?: (linea: string, abortar: (motivo?: string) => void) => void;
 }
 
 /** Interfaz inyectable para el ejecutor de comandos. */
@@ -261,12 +264,14 @@ export class EjecutorComandosReal implements EjecutorComandos {
     inicio: number,
     timeoutMs: number,
     limiteBytes: number,
+    onStdoutLine?: (linea: string, abortar: (motivo?: string) => void) => void,
   ): Promise<ResultadoComando> {
     const bufferStdout = new BufferTruncado(limiteBytes);
     const bufferStderr = new BufferTruncado(limiteBytes);
 
     return new Promise<ResultadoComando>((resolve) => {
       let timedOut = false;
+      let canceladoPor: string | undefined;
       let timer: NodeJS.Timeout | null = null;
       let terminado = false;
 
@@ -283,6 +288,14 @@ export class EjecutorComandosReal implements EjecutorComandos {
           error: detalleError(error),
         });
       }
+
+      const abortar = (motivo?: string): void => {
+        if (terminado) return;
+        canceladoPor = motivo ?? "cancelado";
+        if (child.pid) {
+          matarArbolProcesos(child.pid);
+        }
+      };
 
       const finalizar = (codigo: number | null): void => {
         if (terminado) return;
@@ -303,6 +316,7 @@ export class EjecutorComandosReal implements EjecutorComandos {
           salidaError,
           duracionMs: Date.now() - inicio,
           timeoutVencido: timedOut,
+          canceladoPor,
           bytesDescartadosStdout:
             descartadosStdout > 0 ? descartadosStdout : undefined,
           bytesDescartadosStderr:
@@ -319,8 +333,19 @@ export class EjecutorComandosReal implements EjecutorComandos {
         }, timeoutMs);
       }
 
+      let remanenteStdout = "";
       child.stdout?.on("data", (chunk: Buffer) => {
         bufferStdout.agregar(chunk);
+        if (onStdoutLine) {
+          remanenteStdout += chunk.toString("utf8");
+          const partes = remanenteStdout.split(/\r?\n/);
+          remanenteStdout = partes.pop() ?? "";
+          for (const linea of partes) {
+            if (linea.trim().length > 0) {
+              onStdoutLine(linea, abortar);
+            }
+          }
+        }
       });
 
       child.stderr?.on("data", (chunk: Buffer) => {
@@ -333,6 +358,9 @@ export class EjecutorComandosReal implements EjecutorComandos {
       });
 
       child.on("close", (codigo) => {
+        if (remanenteStdout.trim().length > 0 && onStdoutLine) {
+          onStdoutLine(remanenteStdout, abortar);
+        }
         finalizar(codigo);
       });
     });
@@ -376,6 +404,7 @@ export class EjecutorComandosReal implements EjecutorComandos {
         inicio,
         timeoutMs,
         limiteBytes,
+        opciones?.onStdoutLine,
       );
     }
 
@@ -393,6 +422,7 @@ export class EjecutorComandosReal implements EjecutorComandos {
       inicio,
       timeoutMs,
       limiteBytes,
+      opciones?.onStdoutLine,
     );
   }
 
@@ -433,6 +463,7 @@ export class EjecutorComandosReal implements EjecutorComandos {
       inicio,
       timeoutMs,
       limiteBytes,
+      opciones?.onStdoutLine,
     );
   }
 }

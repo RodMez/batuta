@@ -63,6 +63,7 @@ export interface AgentCallContext {
   permisos: PermisosRol;
   entorno?: Record<string, string>;
   prompt: string;
+  promptSistema?: string;
   runId?: string;
   directorioLogs?: string;
 }
@@ -146,6 +147,7 @@ export interface InvocacionClaudeCodeParams {
   permisos: PermisosRol;
   limites?: LimitesLlamada;
   esquemaJson?: unknown;
+  promptSistema?: string;
 }
 
 /**
@@ -156,8 +158,10 @@ export function construirInvocacionClaudeCode(
 ): { ejecutable: string; args: string[] } {
   const args: string[] = [
     "--print",
+    "--verbose",
     "--output-format",
-    "json",
+    "stream-json",
+    "--bare",
     "--no-session-persistence",
     "--model",
     params.modelo,
@@ -171,7 +175,10 @@ export function construirInvocacionClaudeCode(
     // Rol de solo lectura: herramientas de inspección, sin edición ni comandos
     args.push("--tools", "Read,Grep,Glob");
   } else {
-    // Rol con escritura
+    // Rol con escritura: definir explícitamente herramientas disponibles con --tools
+    args.push("--tools", "Bash,Edit,Write,Read,Grep,Glob");
+
+    // Si hay comandos permitidos, además restringir con --allowed-tools
     if (
       params.permisos.comandosPermitidos &&
       params.permisos.comandosPermitidos.length > 0
@@ -183,9 +190,11 @@ export function construirInvocacionClaudeCode(
         "--allowed-tools",
         `Read Grep Glob Edit Write ${comandosBash}`,
       );
-    } else {
-      args.push("--tools", "Read,Grep,Glob,Edit,Write");
     }
+  }
+
+  if (params.promptSistema !== undefined && params.promptSistema.trim().length > 0) {
+    args.push("--append-system-prompt", params.promptSistema);
   }
 
   if (params.esquemaJson !== undefined) {
@@ -222,8 +231,13 @@ export function parsearSalidaClaudeCode(salidaTexto: string): {
       try {
         const obj = JSON.parse(linea) as Record<string, unknown>;
         if (obj && typeof obj === "object") {
-          rawJson = obj;
-          break;
+          if (obj.type === "result" || obj.result !== undefined) {
+            rawJson = obj;
+            break;
+          }
+          if (!rawJson) {
+            rawJson = obj;
+          }
         }
       } catch {
         // Continuar buscando
@@ -471,28 +485,88 @@ export class ClaudeCodeRunner implements AgentRunner {
 
     let reintentos = 0;
     const promptActual = contexto.prompt;
+    let turnosStreaming = 0;
+    let tokensEntradaStreaming = 0;
+    let tokensSalidaStreaming = 0;
 
     const ejecutarIntento = async (promptParaIntento: string) => {
+      turnosStreaming = 0;
       const { ejecutable, args } = construirInvocacionClaudeCode({
         modelo: contexto.modelo,
         prompt: promptParaIntento,
         permisos: contexto.permisos,
         limites: {
           budgetLimitUsd: input.budget_limit_usd,
-          maxSteps: input.max_steps,
+          maxSteps,
         },
         esquemaJson: AgentOutputJsonSchema,
+        promptSistema: contexto.promptSistema,
       });
 
       return this.ejecutor.ejecutarArgs(ejecutable, args, {
         cwd: contexto.directorioTrabajo,
         timeoutMs,
         entornoExtra: envExtra as Record<string, string>,
+        onStdoutLine: (linea, abortar) => {
+          try {
+            const obj = JSON.parse(linea) as Record<string, unknown>;
+            if (!obj || typeof obj !== "object") return;
+
+            // Cada evento del asistente cuenta como un turno/paso activo del agente
+            if (
+              obj.type === "assistant" ||
+              (obj.message as Record<string, unknown> | undefined)?.role === "assistant"
+            ) {
+              turnosStreaming++;
+              if (turnosStreaming > maxSteps) {
+                abortar("turnos_agotados");
+              }
+            }
+
+            if (obj.usage && typeof obj.usage === "object") {
+              const u = obj.usage as Record<string, unknown>;
+              if (typeof u.input_tokens === "number") tokensEntradaStreaming = u.input_tokens;
+              if (typeof u.output_tokens === "number") tokensSalidaStreaming = u.output_tokens;
+            }
+          } catch {
+            // Ignorar líneas no JSON o avisos del CLI
+          }
+        },
       });
     };
 
     // 1. Primer intento
     let resultadoCmd = await ejecutarIntento(promptActual);
+
+    // Comprobar si se canceló por turnos agotados en streaming
+    if (resultadoCmd.canceladoPor === "turnos_agotados") {
+      await this.guardarLog(
+        rutaLog,
+        `[TURNOS AGOTADOS] Límite de turnos (${maxSteps}) superado mientras el agente corría. Proceso terminado.\nStdout: ${resultadoCmd.salidaEstandar}`,
+      );
+      return {
+        exito: false,
+        output: null,
+        motivoFallo: "turnos_agotados",
+        uso: {
+          tokensEntrada: tokensEntradaStreaming,
+          tokensSalida: tokensSalidaStreaming,
+          turnos: turnosStreaming,
+        },
+        costoEstimado: this.calcularCosto(
+          {
+            tokensEntrada: tokensEntradaStreaming,
+            tokensSalida: tokensSalidaStreaming,
+            turnos: turnosStreaming,
+          },
+          contexto,
+        ),
+        modeloEfectivo: contexto.modelo,
+        duracionMs: Date.now() - inicio,
+        rutaLog,
+        reintentos,
+      };
+    }
 
     // Comprobar si se superó el timeout de Batuta
     if (resultadoCmd.timeoutVencido) {
@@ -522,6 +596,35 @@ export class ClaudeCodeRunner implements AgentRunner {
 
       resultadoCmd = await ejecutarIntento(promptReintento);
 
+      if (resultadoCmd.canceladoPor === "turnos_agotados") {
+        await this.guardarLog(
+          rutaLog,
+          `[TURNOS AGOTADOS EN REINTENTO] Límite de turnos (${maxSteps}) superado. Proceso terminado.\nStdout: ${resultadoCmd.salidaEstandar}`,
+        );
+        return {
+          exito: false,
+          output: null,
+          motivoFallo: "turnos_agotados",
+          uso: {
+            tokensEntrada: tokensEntradaStreaming,
+            tokensSalida: tokensSalidaStreaming,
+            turnos: turnosStreaming,
+          },
+          costoEstimado: this.calcularCosto(
+            {
+              tokensEntrada: tokensEntradaStreaming,
+              tokensSalida: tokensSalidaStreaming,
+              turnos: turnosStreaming,
+            },
+            contexto,
+          ),
+          modeloEfectivo: contexto.modelo,
+          duracionMs: Date.now() - inicio,
+          rutaLog,
+          reintentos,
+        };
+      }
+
       if (resultadoCmd.timeoutVencido) {
         await this.guardarLog(
           rutaLog,
@@ -544,7 +647,10 @@ export class ClaudeCodeRunner implements AgentRunner {
     }
 
     // 3. Batuta aplica el límite de turnos aunque la herramienta lo ignore
-    if (interpretacion.uso.turnos && interpretacion.uso.turnos > maxSteps) {
+    const turnosTotales = Math.max(interpretacion.uso.turnos ?? 0, turnosStreaming);
+    interpretacion.uso.turnos = turnosTotales;
+
+    if (turnosTotales > maxSteps) {
       interpretacion.exito = false;
       interpretacion.agentOutput = null;
       interpretacion.motivoFallo = "turnos_agotados";
