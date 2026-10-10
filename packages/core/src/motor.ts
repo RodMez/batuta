@@ -171,7 +171,15 @@ export function siguientePaso(
       }
       return { paso: "emitir-plan" };
     }
-    case "PLAN":
+    case "PLAN": {
+      if (puertaNecesaria("H2", config, progreso.aprobaciones)) {
+        return { paso: "solicitar-aprobacion", puerta: "H2" };
+      }
+      if (progreso.subtareaIndice < progreso.totalSubtareas) {
+        return { paso: "ejecutar-subtarea", indice: progreso.subtareaIndice };
+      }
+      return { paso: "generar-cierre" };
+    }
     case "CHECKPOINT":
     case "RETRY":
     case "DEBUG":
@@ -184,6 +192,12 @@ export function siguientePaso(
     }
     case "REVIEW":
     case "FINALIZE": {
+      if (
+        estado.estado === "FINALIZE" &&
+        puertaNecesaria("H3", config, progreso.aprobaciones)
+      ) {
+        return { paso: "solicitar-aprobacion", puerta: "H3" };
+      }
       return { paso: "generar-cierre" };
     }
     default: {
@@ -1446,30 +1460,21 @@ export class MotorFlujo {
     const estado = await this.deps.store.estado(runId);
     const progreso = await this.leerProgreso(dirBatuta, runId);
 
-    if (estado.estado === "CHECKPOINT" || this.todasCompletadas(progreso)) {
-      if (estado.estado === "CHECKPOINT") {
-        await this.deps.store.agregar(runId, {
-          tipo: "revision_completada",
-          payload: { omitida: true, motivo: "hito 6 sin revisores" },
-        });
-        await this.deps.store.agregar(runId, {
-          tipo: "pr_creada",
-          payload: { omitida: true, motivo: "hito 6 sin push" },
-        });
-      }
+    // La decisión de pausar en H3 vive en `siguientePaso`; aquí solo se
+    // avanza REVIEW→FINALIZE→DONE. El resumen se escribe antes de H3 y se
+    // reescribe de forma idempotente al completar.
+    if (estado.estado === "CHECKPOINT") {
+      await this.deps.store.agregar(runId, {
+        tipo: "revision_completada",
+        payload: { omitida: true, motivo: "hito 6 sin revisores" },
+      });
+      await this.deps.store.agregar(runId, {
+        tipo: "pr_creada",
+        payload: { omitida: true, motivo: "hito 6 sin push" },
+      });
       const resumen = this.textoResumen(progreso, config);
       await this.deps.fs.escribirArchivo(rutaResumen(dirBatuta, runId), resumen);
-      if (config.aprobaciones.H3_merge && !progreso.aprobaciones["H3"].aprobada) {
-        await this.solicitarAprobacion(dirBatuta, runId, config, "H3");
-        return { resultado: "pausa-aprobacion", runId, puerta: "H3" };
-      }
-      await this.deps.store.agregar(runId, { tipo: "ejecucion_completada" });
-      await this.deps.notificador.notificar({
-        tipo: "ejecucion_terminada",
-        runId,
-        mensaje: `Ejecución ${runId} terminada en DONE`,
-      });
-      return { resultado: "terminada", runId };
+      return null;
     }
 
     if (estado.estado === "REVIEW") {
@@ -1483,10 +1488,6 @@ export class MotorFlujo {
     if (estado.estado === "FINALIZE") {
       const resumen = this.textoResumen(progreso, config);
       await this.deps.fs.escribirArchivo(rutaResumen(dirBatuta, runId), resumen);
-      if (config.aprobaciones.H3_merge && !progreso.aprobaciones["H3"].aprobada) {
-        await this.solicitarAprobacion(dirBatuta, runId, config, "H3");
-        return { resultado: "pausa-aprobacion", runId, puerta: "H3" };
-      }
       await this.deps.store.agregar(runId, { tipo: "ejecucion_completada" });
       await this.deps.notificador.notificar({
         tipo: "ejecucion_terminada",
@@ -1503,13 +1504,6 @@ export class MotorFlujo {
       return null;
     }
     return null;
-  }
-
-  private todasCompletadas(progreso: ProgresoMotor): boolean {
-    return (
-      progreso.subtareas.length > 0 &&
-      progreso.subtareas.every((s) => s.completada)
-    );
   }
 
   private textoResumen(progreso: ProgresoMotor, config: BatutaConfig): string {

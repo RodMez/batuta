@@ -71,6 +71,23 @@ describe("siguientePaso (pauta del planificador)", () => {
     });
   });
 
+  it("pide H2 en PLAN cuando está habilitada y sin aprobar", () => {
+    const conH2 = parseBatutaConfig({
+      proyecto: "repo",
+      gates: [{ nombre: "ok", comando: "node -e \"1\"", timeout_seg: 30 }],
+      aprobaciones: { H0_inicio: false, H1_spec: false, H2_plan: true, H3_merge: false },
+    });
+    expect(siguientePaso(estado("PLAN"), progresoBase(), conH2)).toEqual({
+      paso: "solicitar-aprobacion",
+      puerta: "H2",
+    });
+    const aprobada = progresoBase({ aprobaciones: { H0: { aprobada: true }, H1: { aprobada: true }, H2: { aprobada: true, hash: "h" }, H3: { aprobada: false } } });
+    expect(siguientePaso(estado("PLAN"), aprobada, conH2)).toEqual({
+      paso: "ejecutar-subtarea",
+      indice: 0,
+    });
+  });
+
   it("en espera devuelve la pausa sin bloquear", () => {
     const config = configBase();
     expect(
@@ -89,6 +106,30 @@ describe("siguientePaso (pauta del planificador)", () => {
     const config = configBase();
     const p = progresoBase({ subtareaIndice: 2, totalSubtareas: 2 });
     expect(siguientePaso(estado("CHECKPOINT"), p, config)).toEqual({ paso: "generar-cierre" });
-    expect(siguientePaso(estado("FINALIZE"), p, config)).toEqual({ paso: "generar-cierre" });
+  });
+
+  it("la pausa H3 se decide en la función pura", () => {
+    const conH3 = parseBatutaConfig({
+      proyecto: "repo",
+      gates: [{ nombre: "ok", comando: "node -e \"1\"", timeout_seg: 30 }],
+      aprobaciones: { H0_inicio: false, H1_spec: false, H2_plan: false, H3_merge: true },
+    });
+    const p = progresoBase({ subtareaIndice: 2, totalSubtareas: 2 });
+    expect(siguientePaso(estado("FINALIZE"), p, conH3)).toEqual({
+      paso: "solicitar-aprobacion",
+      puerta: "H3",
+    });
+    const aprobada = progresoBase({
+      subtareaIndice: 2,
+      totalSubtareas: 2,
+      aprobaciones: { H0: { aprobada: true }, H1: { aprobada: true }, H2: { aprobada: true }, H3: { aprobada: true } },
+    });
+    expect(siguientePaso(estado("FINALIZE"), aprobada, conH3)).toEqual({ paso: "generar-cierre" });
+    const sinH3 = parseBatutaConfig({
+      proyecto: "repo",
+      gates: [{ nombre: "ok", comando: "node -e \"1\"", timeout_seg: 30 }],
+      aprobaciones: { H0_inicio: false, H1_spec: false, H2_plan: false, H3_merge: false },
+    });
+    expect(siguientePaso(estado("FINALIZE"), p, sinH3)).toEqual({ paso: "generar-cierre" });
   });
 });
