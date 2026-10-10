@@ -1,8 +1,8 @@
 # Batuta: sistema orquestador de agentes de IA
 
-> Diseño v0.16 · Plan cerrado, piloto verificado y plan de codificación · 9 de octubre de 2026
+> Diseño v0.18 · Plan cerrado, piloto verificado y plan de codificación · 10 de octubre de 2026
 > Estado: solo planificación. Todavía no hay código ni lenguaje elegido.
-> Las versiones v0.2 a v0.16 incorporan la comparación con ForgeFlow Harness y las decisiones de ejecución, despliegue y avisos (ver el registro de cambios al final).
+> Las versiones v0.2 a v0.18 incorporan la comparación con ForgeFlow Harness y las decisiones de ejecución, despliegue y avisos (ver el registro de cambios al final).
 
 ## 1. Visión
 
@@ -154,7 +154,7 @@ brief.md ──▶ CLI de Batuta
 3. Tests unitarios.
 4. Tests de integración (si aplica).
 5. Criterios de aceptación de la especificación (un comando por criterio).
-6. **Política de diff:** solo se tocaron archivos permitidos, ninguno prohibido, el tamaño del diff está dentro del límite y no se agregaron secretos.
+6. **Política de diff:** solo se tocaron archivos permitidos, ninguno prohibido, el tamaño del diff está dentro del límite y no se agregaron secretos. Se evalúa antes que los demás gates, porque es barata y evita ejecutarlos sobre cambios inválidos; una violación cuenta como intento fallido y el worktree vuelve al último commit confirmado.
 
 **Política de reintentos:**
 - Máximo 3 intentos por subtarea.
@@ -184,6 +184,8 @@ INTAKE → [H0: aprobar presupuesto y límites] → SPEC → [H1: aprobar spec] 
 Estados terminales: `DONE`, `FAILED` (límite de intentos o presupuesto), `ABORTED` (cancelada por la persona).
 
 Estados de espera: `WAITING_INPUT` (duda crítica) y `AWAITING_APPROVAL` (espera una puerta humana: H0, H1, H2 o H3; el estado guarda cuál).
+
+Las aprobaciones guardan el hash del documento aprobado (`spec.md` o `plan.json`); si cambia después, hace falta aprobar de nuevo. Al reanudar tras una interrupción, el worktree vuelve al último commit confirmado y se repite la subtarea en curso; el intento interrumpido no cuenta contra el límite de intentos.
 
 **Comandos de la CLI:**
 - `batuta run brief.md`: inicia una ejecución; muestra los límites de presupuesto y pide confirmación (H0).
@@ -265,7 +267,7 @@ En el MVP **todos los agentes se invocan por CLI headless**. Una capa común ocu
 
 | Adaptador | Cuándo | Notas |
 |---|---|---|
-| `ClaudeCodeRunner` | MVP (primero) | Admite tope de gasto, límite de turnos, salida con esquema JSON y permisos por comando |
+| `ClaudeCodeRunner` | MVP (primero) | Admite tope de gasto, salida con esquema JSON y permisos por herramienta. La versión 2.1.282 no tiene límite de turnos: Batuta cuenta los turnos con la salida en streaming y termina el proceso al superar el límite |
 | `OpenCodeRunner` | Fase 2 | Reutiliza los agentes actuales; no se asumen límites nativos de turnos ni de costo |
 | `ApiRunner` | Futuro, opcional | Solo para pasos sin herramientas (architect, revisores, resúmenes) |
 
@@ -281,7 +283,7 @@ En el MVP **todos los agentes se invocan por CLI headless**. Una capa común ocu
 - *Solo lectura* (`scout`, `architect`, revisores, resúmenes): pueden leer y buscar archivos, sin editar ni ejecutar comandos. El contenido de `spec.md` y `plan.json` lo devuelve el `architect` en su salida y es Batuta quien escribe los archivos.
 - *Con escritura* (`software-engineer`, `debugger`): pueden editar los archivos permitidos y ejecutar solo los comandos de la lista permitida de la configuración.
 
-Se recomienda un arranque mínimo de la herramienta (en Claude Code, la opción `--bare`) para no cargar contexto innecesario. Las reglas del repositorio y la spec se inyectan de forma explícita.
+Se usa un arranque mínimo de la herramienta (en Claude Code, la opción `--bare`), que además aísla a los agentes de la configuración del usuario: hooks, memoria, `CLAUDE.md`, permisos y variables de sus ajustes. Con `--bare` la autenticación es solo por clave de API. Las reglas del repositorio y la spec se inyectan de forma explícita.
 
 ## 6. Datos y estructura de archivos
 
@@ -639,7 +641,8 @@ Los hitos fijan el objetivo y el criterio de terminación. El agente puede propo
 - **Hito 2:** aceptado y fusionado (9 archivos de prueba, 61 pruebas, CI en verde). Su revisión dejó un ajuste previo para el hito 3: la recuperación automática de bloqueos obsoletos del registro.
 - **Hito 3:** aceptado (91 pruebas, CI en verde en Linux y Windows) tras corregir una prueba de terminación de procesos mal planteada. Se había fusionado en `main` con el CI en rojo y se revirtió, así que se restaura con un PR que revierte el revert y fusiona la rama corregida.
 - **Hito 4:** aceptado y fusionado (100 pruebas, CI en verde; las pruebas no dejan worktrees ni ramas sobrantes). La revisión encontró un fallo de seguridad: los comandos de Git se arman como texto con el mensaje de commit y las referencias interpolados, y un mensaje con comillas puede inyectar argumentos (se comprobó que `--no-verify` salta un hook que bloquea el commit). Se corrige como primer ajuste del hito 5.
-- **Hito 5:** en preparación.
+- **Hito 5:** aceptado y fusionable (127 pruebas, CI en verde en Linux y Windows) tras corregir una prueba de Git en Linux, el límite de turnos en vivo y el aislamiento con `--bare`. La revisión dejó tres ajustes previos para el hito 6: separar el prompt con `--`, coherencia de permisos de los roles con escritura y un script de captura probado. La captura real de salidas de Claude Code (criterios CA-4 y CA-11) sigue pendiente de una llamada con credenciales.
+- **Hito 6:** en preparación.
 
 ### Estrategia de pruebas
 
@@ -687,6 +690,12 @@ Revisores independientes, enrutamiento por complejidad, avisos por Telegram, `ba
 1. **Estrategia de `node_modules` con subtareas en paralelo** (Fase 3), descrita en la sección 18.
 
 ## 21. Registro de cambios
+
+**v0.18**
+- Revisión de las correcciones del hito 5: aceptado con tres ajustes previos para el hito 6. Reglas del motor en la sección 4 (hash de los documentos aprobados y reanudación) y la política de diff pasa a evaluarse primero.
+
+**v0.17**
+- Revisión del hito 5 (no aceptado todavía): el plan daba por hecho un flag de turnos que no existe en Claude Code 2.1.282, así que Batuta cuenta los turnos con la salida en streaming; el aislamiento de la configuración del usuario se hace con `--bare`.
 
 **v0.16**
 - Revisión del hito 4: aceptado con un ajuste obligatorio. Nueva regla en la sección 8: sin interpolación de texto de agentes en líneas de comandos. Nuevo campo `variables_modelo` en la configuración.
