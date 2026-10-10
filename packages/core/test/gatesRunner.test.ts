@@ -80,6 +80,9 @@ describe("ejecutarGates (CA-7)", () => {
     expect(ejecutor.llamadas[0]?.opciones?.entornoExtra).toEqual({
       DATABASE_URL: "file:./test.db",
     });
+    expect(ejecutor.llamadas[0]?.opciones?.shell).toBe(true);
+    expect(ejecutor.llamadas[1]?.opciones?.shell).toBe(true);
+    expect(ejecutor.llamadas[2]?.opciones?.shell).toBe(true);
   });
 
   it("se detiene en el primer fallo por defecto y no ejecuta los siguientes (CA-7)", async () => {

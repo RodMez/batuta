@@ -6,6 +6,7 @@ import {
   EjecutorComandosReal,
   existeProceso,
   matarArbolProcesos,
+  separarComandoYArgumentos,
 } from "../src/index.js";
 
 describe("BufferTruncado (CA-3)", () => {
@@ -87,6 +88,30 @@ describe("construirEntornoLimpio (CA-4)", () => {
   });
 });
 
+describe("separarComandoYArgumentos", () => {
+  it("separa comandos simples por espacios", () => {
+    const { ejecutable, args } = separarComandoYArgumentos("git status --short");
+    expect(ejecutable).toBe("git");
+    expect(args).toEqual(["status", "--short"]);
+  });
+
+  it("respeta argumentos con comillas dobles y comillas simples anidadas", () => {
+    const { ejecutable, args } = separarComandoYArgumentos(
+      'node -e "console.log(\'hola\');"',
+    );
+    expect(ejecutable).toBe("node");
+    expect(args).toEqual(["-e", "console.log('hola');"]);
+  });
+
+  it("respeta rutas con barras invertidas de Windows sin escapar letras", () => {
+    const { ejecutable, args } = separarComandoYArgumentos(
+      'C:\\Users\\bin\\app.exe --dir "C:\\Archivos de Programa"',
+    );
+    expect(ejecutable).toBe("C:\\Users\\bin\\app.exe");
+    expect(args).toEqual(["--dir", "C:\\Archivos de Programa"]);
+  });
+});
+
 describe("EjecutorComandosReal", () => {
   const ejecutor = new EjecutorComandosReal();
 
@@ -116,7 +141,7 @@ describe("EjecutorComandosReal", () => {
     const comando = [
       'node -e "',
       "const cp = require('node:child_process');",
-      "const g = cp.spawn(process.execPath, ['-e', 'setInterval(() => {}, 200)'], { detached: true, stdio: 'ignore' });",
+      "const g = cp.spawn(process.execPath, ['-e', 'setInterval(() => {}, 200)'], { stdio: 'ignore' });",
       "console.log('NIETO:' + g.pid);",
       "setInterval(() => {}, 200);",
       '"',
@@ -134,11 +159,15 @@ describe("EjecutorComandosReal", () => {
     const nietoPid = parseInt(match![1], 10);
     expect(nietoPid).toBeGreaterThan(0);
 
-    // Esperar un momento a que el SO procese la terminación del árbol
-    await new Promise((r) => setTimeout(r, 200));
+    // Esperar a que el SO procese la terminación del árbol (sondeo hasta 3 s)
+    let nietoVivo = true;
+    for (let i = 0; i < 60; i++) {
+      nietoVivo = existeProceso(nietoPid);
+      if (!nietoVivo) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
 
     // El nieto debe estar muerto
-    const nietoVivo = existeProceso(nietoPid);
     if (nietoVivo) {
       matarArbolProcesos(nietoPid); // Limpieza de seguridad
     }
@@ -203,8 +232,14 @@ describe("EjecutorComandosReal", () => {
     expect(resCmd.timeoutVencido).toBe(false);
   });
 
-  it("puede ejecutar npm --version en Linux y en Windows (CA-6)", async () => {
-    const res = await ejecutor.ejecutar("npm --version");
+  it("shell vale false por defecto y ejecuta comandos directos sin invocar shell", async () => {
+    const res = await ejecutor.ejecutar('node -e "console.log(\'directo sin shell\')"');
+    expect(res.codigoSalida).toBe(0);
+    expect(res.salidaEstandar.trim()).toBe("directo sin shell");
+  });
+
+  it("puede ejecutar npm --version en Linux y en Windows pasando shell: true (CA-6)", async () => {
+    const res = await ejecutor.ejecutar("npm --version", { shell: true });
     expect(res.codigoSalida).toBe(0);
     expect(res.salidaEstandar.trim()).toMatch(/^\d+\.\d+\.\d+/);
   });

@@ -118,6 +118,7 @@ export {
   construirEntornoLimpio,
   EjecutorComandosReal,
   matarArbolProcesos,
+  separarComandoYArgumentos,
   VARIABLES_ENTORNO_PERMITIDAS,
 } from "./commandRunner.js";
 export type {

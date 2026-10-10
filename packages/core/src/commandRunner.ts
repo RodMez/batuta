@@ -181,6 +181,52 @@ export function matarArbolProcesos(pid: number): void {
 }
 
 /**
+ * Separa una línea de comandos en ejecutable y argumentos respetando
+ * comillas simples y dobles para su ejecución directa sin shell.
+ */
+export function separarComandoYArgumentos(lineaComandos: string): {
+  ejecutable: string;
+  args: string[];
+} {
+  const tokens: string[] = [];
+  let tokenActual = "";
+  let enComillasDobles = false;
+  let enComillasSimples = false;
+
+  for (let i = 0; i < lineaComandos.length; i++) {
+    const char = lineaComandos[i]!;
+
+    if (char === '"' && !enComillasSimples) {
+      enComillasDobles = !enComillasDobles;
+    } else if (char === "'" && !enComillasDobles) {
+      enComillasSimples = !enComillasSimples;
+    } else if (
+      char === "\\" &&
+      (enComillasDobles || !enComillasSimples) &&
+      (lineaComandos[i + 1] === '"' || lineaComandos[i + 1] === "'")
+    ) {
+      i++;
+      tokenActual += lineaComandos[i]!;
+    } else if (/\s/.test(char) && !enComillasDobles && !enComillasSimples) {
+      if (tokenActual.length > 0) {
+        tokens.push(tokenActual);
+        tokenActual = "";
+      }
+    } else {
+      tokenActual += char;
+    }
+  }
+
+  if (tokenActual.length > 0) {
+    tokens.push(tokenActual);
+  }
+
+  const ejecutable = tokens[0] ?? "";
+  const args = tokens.slice(1);
+  return { ejecutable, args };
+}
+
+/**
  * Ejecutor de comandos real sobre el sistema operativo.
  */
 export class EjecutorComandosReal implements EjecutorComandos {
@@ -216,7 +262,7 @@ export class EjecutorComandosReal implements EjecutorComandos {
     const timeoutMs = opciones?.timeoutMs ?? this.timeoutPorDefectoMs;
     const limiteBytes = opciones?.limiteSalidaBytes ?? this.limiteSalidaPorDefecto;
     const env = construirEntornoLimpio(process.env, opciones?.entornoExtra);
-    const shell = opciones?.shell ?? true;
+    const shell = opciones?.shell ?? false;
 
     const bufferStdout = new BufferTruncado(limiteBytes);
     const bufferStderr = new BufferTruncado(limiteBytes);
@@ -231,14 +277,26 @@ export class EjecutorComandosReal implements EjecutorComandos {
 
       let child;
       try {
-        child = spawn(comando, {
-          cwd,
-          env,
-          shell,
-          detached,
-          windowsHide: true,
-          stdio: ["ignore", "pipe", "pipe"],
-        });
+        if (shell) {
+          child = spawn(comando, {
+            cwd,
+            env,
+            shell,
+            detached,
+            windowsHide: true,
+            stdio: ["ignore", "pipe", "pipe"],
+          });
+        } else {
+          const { ejecutable, args } = separarComandoYArgumentos(comando);
+          child = spawn(ejecutable, args, {
+            cwd,
+            env,
+            shell: false,
+            detached,
+            windowsHide: true,
+            stdio: ["ignore", "pipe", "pipe"],
+          });
+        }
       } catch (error) {
         return resolve({
           codigoSalida: null,
