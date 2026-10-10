@@ -1,8 +1,8 @@
 # Batuta: sistema orquestador de agentes de IA
 
-> Diseño v0.13 · Plan cerrado, piloto verificado y plan de codificación · 9 de octubre de 2026
+> Diseño v0.15 · Plan cerrado, piloto verificado y plan de codificación · 9 de octubre de 2026
 > Estado: solo planificación. Todavía no hay código ni lenguaje elegido.
-> Las versiones v0.2 a v0.13 incorporan la comparación con ForgeFlow Harness y las decisiones de ejecución, despliegue y avisos (ver el registro de cambios al final).
+> Las versiones v0.2 a v0.15 incorporan la comparación con ForgeFlow Harness y las decisiones de ejecución, despliegue y avisos (ver el registro de cambios al final).
 
 ## 1. Visión
 
@@ -82,6 +82,7 @@ brief.md ──▶ CLI de Batuta
 
 **Cómo funciona:**
 - Cada ejecución crea `git worktree add <dir>/<run_id> -b batuta/<run_id>`.
+- Por defecto el worktree se crea fuera del árbol del repositorio, en un directorio hermano, para que las herramientas del proyecto no recorran copias duplicadas del código. La ubicación es configurable (`directorio_worktrees`). Las operaciones destructivas solo se ejecutan sobre worktrees creados por Batuta.
 - Cada subtarea verificada se guarda como un commit en esa rama, que sirve de punto de retorno.
 - Si una subtarea falla definitivamente, se hace `git reset --hard` al último commit bueno.
 - Si la ejecución se aborta o descarrila, se elimina el worktree y la rama sin dejar rastro.
@@ -370,6 +371,7 @@ politica_comandos:
   alto: pedir_confirmacion   # borrar, git push, privilegios elevados
 rutas_prohibidas: [".env", "infra/", ".github/workflows/"]
 specs_en_repo: true
+directorio_worktrees: <completar>   # opcional; por defecto, un directorio hermano del repositorio
 notificaciones:
   canal: telegram            # token y chat por variables de entorno
   eventos: [aprobacion_requerida, espera_de_respuesta, fallo, ejecucion_terminada, costo_cerca_del_limite]
@@ -438,7 +440,7 @@ Batuta corre primero en local y pasará a un VPS pronto. Para no rehacer cosas a
 - **Aislamiento reforzado:** usuario sin privilegios, sin secretos de producción y Docker para las verificaciones antes de migrar.
 - **Proceso persistente:** servicio (systemd o tmux) que se reanuda con `batuta resume` tras un reinicio.
 - **Registros en archivos:** nada depende de una terminal interactiva.
-- **Windows y Linux:** el desarrollo local es en Windows y el VPS será Linux, así que Batuta no puede depender de comandos de shell específicos. Usa las APIs de Node para archivos y rutas, lanza los comandos sin shell cuando se pueda y, al vencer un timeout, termina el árbol completo de procesos (en Windows con `taskkill /T`, en Linux con grupos de procesos).
+- **Windows y Linux:** el desarrollo local es en Windows y el VPS será Linux, así que Batuta no puede depender de comandos de shell específicos. Usa las APIs de Node para archivos y rutas, lanza los comandos sin shell cuando se pueda y, al vencer un timeout, termina el árbol completo de procesos (en Windows con `taskkill /T`, en Linux con grupos de procesos). En Windows, el entorno limpio de los subprocesos debe conservar `PATH`, `PATHEXT`, `SystemRoot` y `ComSpec`; sin ellos muchos ejecutables no arrancan. Un proceso que se desacopla a propósito (`setsid` o `detached`) escapa de la terminación por grupo en Linux; el aislamiento completo llega con Docker (Fase 3).
 
 ## 15. Notificaciones
 
@@ -633,7 +635,8 @@ Los hitos fijan el objetivo y el criterio de terminación. El agente puede propo
 - **Hito 0:** aceptado y fusionado en `main` (CI en verde en Linux y Windows).
 - **Hito 1:** aceptado y fusionado (32 pruebas). Su revisión generó tres ajustes que se resolvieron en el hito 2.
 - **Hito 2:** aceptado y fusionado (9 archivos de prueba, 61 pruebas, CI en verde). Su revisión dejó un ajuste previo para el hito 3: la recuperación automática de bloqueos obsoletos del registro.
-- **Hito 3:** en preparación.
+- **Hito 3:** aceptado (91 pruebas, CI en verde en Linux y Windows) tras corregir una prueba de terminación de procesos mal planteada. Se había fusionado en `main` con el CI en rojo y se revirtió, así que se restaura con un PR que revierte el revert y fusiona la rama corregida.
+- **Hito 4:** en preparación.
 
 ### Estrategia de pruebas
 
@@ -681,6 +684,12 @@ Revisores independientes, enrutamiento por complejidad, avisos por Telegram, `ba
 1. **Estrategia de `node_modules` con subtareas en paralelo** (Fase 3), descrita en la sección 18.
 
 ## 21. Registro de cambios
+
+**v0.15**
+- Revisión del hito 3: aceptado. Nuevo parámetro `directorio_worktrees` y regla de ubicación de los worktrees (fuera del árbol del repositorio).
+
+**v0.14**
+- Revisión del hito 3: entorno limpio de Windows y límite de la terminación por grupo en Linux documentados en la sección 14; estado del hito 3 en la sección de avance.
 
 **v0.13**
 - Revisión del hito 2: aceptado. El bloqueo del registro guarda PID, equipo y hora, y un bloqueo obsoleto se recupera solo (necesario para reanudar tras matar el proceso). Sección de avance actualizada.
