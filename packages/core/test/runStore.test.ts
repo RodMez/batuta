@@ -4,6 +4,7 @@ import {
   RunStore,
   applyEvent,
   dirCheckpoints,
+  existeProceso,
   generarRunId,
   nombreCheckpoint,
   rebuildState,
@@ -20,14 +21,27 @@ import {
 
 const BATUTA = ".batuta";
 
-function nuevoStore(): {
+function nuevoStore(opciones?: {
+  comprobarProceso?: (pid: number) => boolean;
+  equipo?: string;
+}): {
   fs: SistemaArchivosMemoria;
   reloj: ReturnType<typeof crearRelojFijo>;
   store: RunStore;
 } {
   const fs = new SistemaArchivosMemoria();
   const reloj = crearRelojFijo();
-  return { fs, reloj, store: new RunStore(BATUTA, fs, reloj) };
+  return {
+    fs,
+    reloj,
+    store: new RunStore(
+      BATUTA,
+      fs,
+      reloj,
+      opciones?.comprobarProceso,
+      opciones?.equipo,
+    ),
+  };
 }
 
 async function cicloCompleto(
@@ -119,17 +133,102 @@ describe("almacén de ejecución (CA-1, CA-3, CA-5, CA-6)", () => {
     ).rejects.toThrow(/restaurar/);
   });
 
-  it("un solo escritor: el bloqueo ocupado falla y se libera siempre", async () => {
-    const { fs, store } = nuevoStore();
+  it("un solo escritor: el bloqueo ocupado falla si el proceso sigue vivo (CA-9)", async () => {
+    const { fs, store } = nuevoStore({
+      comprobarProceso: (p: number) => p === 9999,
+      equipo: "mi-host",
+    });
     const runId = await store.iniciarEjecucion();
     const bloqueo = rutaBloqueoRun(BATUTA, runId);
-    await fs.escribirArchivo(bloqueo, "9999");
+    await fs.escribirArchivo(
+      bloqueo,
+      JSON.stringify({ pid: 9999, equipo: "mi-host", hora: "2026-10-09T10:00:00Z" }),
+    );
     await expect(
       store.agregar(runId, { tipo: "spec_creada" }),
-    ).rejects.toThrow(/bloqueo/);
-    await fs.borrar(bloqueo);
-    await store.agregar(runId, { tipo: "spec_creada" });
+    ).rejects.toThrow(/sigue activo/);
+  });
+
+  it("un solo escritor: el bloqueo falla si pertenece a otro equipo", async () => {
+    const { fs, store } = nuevoStore({
+      equipo: "mi-host",
+    });
+    const runId = await store.iniciarEjecucion();
+    const bloqueo = rutaBloqueoRun(BATUTA, runId);
+    await fs.escribirArchivo(
+      bloqueo,
+      JSON.stringify({ pid: 8888, equipo: "otro-host", hora: "2026-10-09T10:00:00Z" }),
+    );
+    await expect(
+      store.agregar(runId, { tipo: "spec_creada" }),
+    ).rejects.toThrow(/otro-host/);
+  });
+
+  it("recuperación de bloqueo obsoleto: si el proceso ya no existe se recupera y deja constancia en el registro (CA-9)", async () => {
+    const { fs, store } = nuevoStore({
+      comprobarProceso: () => false,
+      equipo: "mi-host",
+    });
+    const runId = await store.iniciarEjecucion();
+    const bloqueo = rutaBloqueoRun(BATUTA, runId);
+    await fs.escribirArchivo(
+      bloqueo,
+      JSON.stringify({ pid: 7777, equipo: "mi-host", hora: "2026-10-09T09:00:00Z" }),
+    );
+
+    // Debe recuperarse sin error y agregar el evento
+    const evento = await store.agregar(runId, { tipo: "spec_creada" });
+    expect(evento.tipo).toBe("spec_creada");
+    // El bloqueo debe haberse liberado al terminar
     expect(fs.verArchivo(bloqueo)).toBeUndefined();
+
+    // Comprobar que en el registro quedó constancia (evento ejecucion_reanudada)
+    const lectura = await store.leer(runId);
+    expect(lectura.eventos.map((e) => e.tipo)).toEqual([
+      "ejecucion_iniciada",
+      "ejecucion_reanudada",
+      "spec_creada",
+    ]);
+    const reanudacion = lectura.eventos[1];
+    expect(reanudacion?.payload).toMatchObject({
+      motivo: "bloqueo_obsoleto_recuperado",
+      bloqueo_obsoleto_recuperado: { pid: 7777, equipo: "mi-host" },
+    });
+
+    // También dejó constancia en el log auxiliar
+    const logBloqueos = fs.verArchivo(`${BATUTA}/runs/${runId}/logs/bloqueos.log`);
+    expect(logBloqueos).toContain("Bloqueo obsoleto recuperado: PID 7777");
+  });
+
+  it("recuperación de bloqueo obsoleto durante restaurar (CA-9)", async () => {
+    const { fs, store } = nuevoStore({
+      comprobarProceso: () => false,
+      equipo: "mi-host",
+    });
+    const runId = await store.iniciarEjecucion();
+    const bloqueo = rutaBloqueoRun(BATUTA, runId);
+    await fs.escribirArchivo(
+      bloqueo,
+      JSON.stringify({ pid: 6666, equipo: "mi-host", hora: "2026-10-09T08:00:00Z" }),
+    );
+
+    const resultado = await store.restaurar(runId);
+    expect(resultado.estado.estado).toBe("INTAKE");
+    expect(fs.verArchivo(bloqueo)).toBeUndefined();
+
+    const lectura = await store.leer(runId);
+    const reanudacion = lectura.eventos[lectura.eventos.length - 1];
+    expect(reanudacion?.tipo).toBe("ejecucion_reanudada");
+    expect(reanudacion?.payload).toMatchObject({
+      bloqueo_obsoleto_recuperado: { pid: 6666, equipo: "mi-host" },
+    });
+  });
+
+  it("existeProceso portable: reconoce el proceso actual y falla en PIDs inexistentes", () => {
+    expect(existeProceso(process.pid)).toBe(true);
+    expect(existeProceso(99999999)).toBe(false);
+    expect(existeProceso(-1)).toBe(false);
+    expect(existeProceso(0)).toBe(false);
   });
 
   it("el estado coincide con la reconstrucción y con checkpoint + cola (CA-3)", async () => {
