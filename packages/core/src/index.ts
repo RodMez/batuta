@@ -187,7 +187,16 @@ export {
   recortarInformeFallo,
 } from "./informeFallo.js";
 export type { FalloEvaluacion } from "./informeFallo.js";
+export { listarEjecuciones } from "./ejecuciones.js";
 export { NotificadorNulo } from "./notificador.js";
+export {
+  GuionLlamadaSchema,
+  GuionSimuladoSchema,
+  parseGuion,
+  parseGuionJson,
+  RunnerGuionado,
+} from "./guionRunner.js";
+export type { GuionLlamada, GuionSimulado } from "./guionRunner.js";
 export type { Aviso, Notificador, TipoAviso } from "./notificador.js";
 export { seleccionarModelo } from "./seleccionModelo.js";
 export type { DecisionModelo } from "./seleccionModelo.js";
@@ -244,6 +253,7 @@ export {
   ClaudeCodeRunner,
   construirInvocacionClaudeCode,
   FakeRunner,
+  MotivoFalloAgenteSchema,
   parsearSalidaClaudeCode,
   verificarPreflightClaudeCode,
 } from "./agentRunner.js";
