@@ -182,6 +182,44 @@ export function detectarSecretoEnLinea(linea: string): string | null {
 }
 
 /**
+ * Oculta patrones de secretos conocidos en un texto reemplazándolos por `[REDACTADO]`.
+ * Se utiliza para registrar llamadas de agentes en disco sin exponer credenciales.
+ */
+export function ofuscarSecretos(texto: string): string {
+  let resultado = texto;
+
+  // 1. Bloques de certificados / claves privadas PEM completas
+  resultado = resultado.replace(
+    /-----BEGIN (?:[A-Z0-9_-]+\s+)?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z0-9_-]+\s+)?PRIVATE KEY-----/gi,
+    "[REDACTADO]",
+  );
+
+  // 2. Tokens y claves con formatos reconocidos
+  for (const patron of PATRONES_SECRETOS) {
+    resultado = resultado.replace(
+      new RegExp(patron.regex.source, "gi"),
+      "[REDACTADO]",
+    );
+  }
+
+  // 3. Asignaciones explícitas de claves / secretos a valores literales
+  resultado = resultado.replace(
+    /(?:api[_-]?key|secret|password|passwd|auth[_-]?token|private[_-]?key)\s*([:=]\s*["'])([^"']{12,})(["'])/gi,
+    (match, sep, valor, fin) => {
+      const valorMinus = valor.toLowerCase();
+      const esFalsoPositivo = PALABRAS_CLAVE_FALSOS_POSITIVOS.some((p) =>
+        valorMinus.includes(p),
+      );
+      if (esFalsoPositivo) return match;
+      const prefijo = match.slice(0, match.indexOf(sep));
+      return `${prefijo}${sep}[REDACTADO]${fin}`;
+    },
+  );
+
+  return resultado;
+}
+
+/**
  * Función pura: evalúa un conjunto de cambios contra una política de diff.
  * Devuelve la lista de violaciones encontradas (vacía si el diff es válido).
  */

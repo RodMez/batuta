@@ -13,7 +13,8 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "capturar-claude": "node scripts/capturar-claude.js"
   },
   "dependencies": {
     "yaml": "^2.9.1",

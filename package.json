@@ -15,7 +15,8 @@
     "typecheck": "tsc --build",
     "test": "vitest run",
     "build": "tsc --build",
-    "verify": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "capturar-claude": "npm run build && node packages/core/scripts/capturar-claude.js"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",

@@ -5,8 +5,8 @@ import type { EjecutorComandos, ResultadoComando } from "./commandRunner.js";
 import { EjecutorComandosReal } from "./commandRunner.js";
 import type { CambioArchivo } from "./diffPolicy.js";
 
-/** Versión mínima de Git requerida para soporte completo y estable de worktrees. */
-export const VERSION_MINIMA_GIT = "2.20.0";
+/** Versión mínima de Git requerida para soporte completo y estable de worktrees y --end-of-options en diff. */
+export const VERSION_MINIMA_GIT = "2.28.0";
 
 /** Identidad por defecto con la que Batuta firma los commits de subtareas. */
 export const IDENTIDAD_BATUTA_POR_DEFECTO = {
@@ -312,11 +312,11 @@ export class ModuloGitReal implements ModuloGit {
   ) {}
 
   private async ejecutarGit(
-    comandoArgs: string,
+    args: readonly string[],
     cwd: string,
     entornoExtra?: Record<string, string>,
   ): Promise<ResultadoComando> {
-    return this.ejecutor.ejecutar(`git ${comandoArgs}`, {
+    return this.ejecutor.ejecutarArgs("git", args, {
       cwd,
       entornoExtra,
     });
@@ -334,8 +334,8 @@ export class ModuloGitReal implements ModuloGit {
       throw new Error(`El directorio del worktree no existe: "${rutaNorm}".`);
     }
 
-    const resCommon = await this.ejecutarGit("rev-parse --git-common-dir", rutaNorm);
-    const resGitDir = await this.ejecutarGit("rev-parse --git-dir", rutaNorm);
+    const resCommon = await this.ejecutarGit(["rev-parse", "--git-common-dir"], rutaNorm);
+    const resGitDir = await this.ejecutarGit(["rev-parse", "--git-dir"], rutaNorm);
     if (resCommon.codigoSalida !== 0 || resGitDir.codigoSalida !== 0) {
       throw new Error(
         `Operación denegada: la ruta "${rutaNorm}" no es un repositorio o worktree de Git válido.`,
@@ -353,7 +353,7 @@ export class ModuloGitReal implements ModuloGit {
     }
 
     // Obtener la rama del worktree
-    const resRama = await this.ejecutarGit("branch --show-current", rutaNorm);
+    const resRama = await this.ejecutarGit(["branch", "--show-current"], rutaNorm);
     const rama = resRama.salidaEstandar.trim();
     if (!rama.startsWith("batuta/")) {
       throw new Error(
@@ -373,7 +373,7 @@ export class ModuloGitReal implements ModuloGit {
     const dirNorm = resolve(directorio);
 
     // 1. Versión de Git
-    const resVersion = await this.ejecutor.ejecutar("git --version", {
+    const resVersion = await this.ejecutor.ejecutarArgs("git", ["--version"], {
       cwd: existsSync(dirNorm) ? dirNorm : undefined,
     });
     let versionGit: string | null = null;
@@ -389,8 +389,9 @@ export class ModuloGitReal implements ModuloGit {
     }
 
     // 2. Comprobar si es un repositorio Git
-    const resRepo = await this.ejecutor.ejecutar(
-      "git rev-parse --is-inside-work-tree",
+    const resRepo = await this.ejecutor.ejecutarArgs(
+      "git",
+      ["rev-parse", "--is-inside-work-tree"],
       { cwd: dirNorm },
     );
     const esRepo =
@@ -409,22 +410,25 @@ export class ModuloGitReal implements ModuloGit {
     }
 
     // 3. Rama actual
-    const resRama = await this.ejecutarGit("branch --show-current", dirNorm);
+    const resRama = await this.ejecutarGit(["branch", "--show-current"], dirNorm);
     const ramaRaw = resRama.salidaEstandar.trim();
     const ramaActual = ramaRaw.length > 0 ? ramaRaw : null;
 
     // 4. Árbol de trabajo limpio
-    const resStatus = await this.ejecutarGit("status --porcelain=v1 -z", dirNorm);
+    const resStatus = await this.ejecutarGit(["status", "--porcelain=v1", "-z"], dirNorm);
     const arbolLimpio =
       resStatus.codigoSalida === 0 && resStatus.salidaEstandar.length === 0;
 
-    // 5. Referencia base existente
-    const resRef = await this.ejecutarGit(
-      `rev-parse --verify --quiet "${refBase}^{commit}"`,
-      dirNorm,
-    );
-    const referenciaExiste =
-      resRef.codigoSalida === 0 && resRef.salidaEstandar.trim().length > 0;
+    // 5. Referencia base existente (si empieza por guión se rechaza como dato inválido)
+    let referenciaExiste = false;
+    if (!refBase.startsWith("-")) {
+      const resRef = await this.ejecutarGit(
+        ["rev-parse", "--verify", "--quiet", `${refBase}^{commit}`],
+        dirNorm,
+      );
+      referenciaExiste =
+        resRef.codigoSalida === 0 && resRef.salidaEstandar.trim().length > 0;
+    }
 
     return {
       esRepo: true,
@@ -456,8 +460,13 @@ export class ModuloGitReal implements ModuloGit {
     }
 
     const refBase = opciones?.refBase ?? "HEAD";
+    if (refBase.startsWith("-")) {
+      throw new Error(
+        `La referencia base "${refBase}" no es válida (no puede comenzar con guión).`,
+      );
+    }
     const resRef = await this.ejecutarGit(
-      `rev-parse --verify "${refBase}^{commit}"`,
+      ["rev-parse", "--verify", `${refBase}^{commit}`],
       repoAbs,
     );
     if (resRef.codigoSalida !== 0) {
@@ -470,7 +479,7 @@ export class ModuloGitReal implements ModuloGit {
 
     // Validar si la rama ya existe
     const resRamaExiste = await this.ejecutarGit(
-      `rev-parse --verify --quiet "refs/heads/${nombreRama}"`,
+      ["rev-parse", "--verify", "--quiet", `refs/heads/${nombreRama}`],
       repoAbs,
     );
     if (resRamaExiste.codigoSalida === 0) {
@@ -499,7 +508,7 @@ export class ModuloGitReal implements ModuloGit {
 
     // Crear el worktree con Git
     const resAdd = await this.ejecutarGit(
-      `worktree add -b "${nombreRama}" "${dirWorktree}" "${commitBase}"`,
+      ["worktree", "add", "-b", nombreRama, "--", dirWorktree, commitBase],
       repoAbs,
     );
     if (resAdd.codigoSalida !== 0) {
@@ -524,7 +533,7 @@ export class ModuloGitReal implements ModuloGit {
     await this.validarWorktreeBatuta(rutaNorm);
 
     // Preparar todos los cambios
-    const resAdd = await this.ejecutarGit("add -A", rutaNorm);
+    const resAdd = await this.ejecutarGit(["add", "-A"], rutaNorm);
     if (resAdd.codigoSalida !== 0) {
       throw new Error(
         `Error al preparar archivos para commit en "${rutaNorm}": ${resAdd.salidaError}`,
@@ -532,7 +541,7 @@ export class ModuloGitReal implements ModuloGit {
     }
 
     // Comprobar si hay cambios staged
-    const resDiff = await this.ejecutarGit("diff --cached --quiet", rutaNorm);
+    const resDiff = await this.ejecutarGit(["diff", "--cached", "--quiet"], rutaNorm);
     if (resDiff.codigoSalida === 0) {
       return {
         creado: false,
@@ -545,8 +554,17 @@ export class ModuloGitReal implements ModuloGit {
     const email = identidad?.email ?? IDENTIDAD_BATUTA_POR_DEFECTO.email;
 
     // Crear el commit con identidad propia inyectada sin tocar git config del usuario
-    const resCommit = await this.ejecutor.ejecutar(
-      `git -c user.name="${nombre}" -c user.email="${email}" commit -m "${mensaje}"`,
+    const resCommit = await this.ejecutor.ejecutarArgs(
+      "git",
+      [
+        "-c",
+        `user.name=${nombre}`,
+        "-c",
+        `user.email=${email}`,
+        "commit",
+        "-m",
+        mensaje,
+      ],
       {
         cwd: rutaNorm,
         entornoExtra: {
@@ -564,7 +582,7 @@ export class ModuloGitReal implements ModuloGit {
       );
     }
 
-    const resHead = await this.ejecutarGit("rev-parse HEAD", rutaNorm);
+    const resHead = await this.ejecutarGit(["rev-parse", "HEAD"], rutaNorm);
     const hash = resHead.salidaEstandar.trim();
 
     return {
@@ -583,14 +601,32 @@ export class ModuloGitReal implements ModuloGit {
 
     // 1. Obtener numstat en formato NUL (-z) sin escapes de caracteres especiales
     const resNumstat = await this.ejecutarGit(
-      `-c core.quotepath=false diff --numstat -z -M "${commitBase}"`,
+      [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--numstat",
+        "-z",
+        "-M",
+        "--end-of-options",
+        commitBase,
+      ],
       rutaNorm,
     );
     const cambiosTracked = parsearNumstatZ(resNumstat.salidaEstandar);
 
     // 2. Obtener líneas añadidas de texto con diff -U0
     const resDiffU0 = await this.ejecutarGit(
-      `-c core.quotepath=false diff -U0 --no-color -M "${commitBase}"`,
+      [
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "-U0",
+        "--no-color",
+        "-M",
+        "--end-of-options",
+        commitBase,
+      ],
       rutaNorm,
     );
     const lineasAnadidasMap = parsearLineasAnadidasDiff(resDiffU0.salidaEstandar);
@@ -610,7 +646,7 @@ export class ModuloGitReal implements ModuloGit {
 
     // 3. Obtener archivos nuevos sin seguimiento (untracked)
     const resStatus = await this.ejecutarGit(
-      "-c core.quotepath=false status --porcelain=v1 -z -uall",
+      ["-c", "core.quotepath=false", "status", "--porcelain=v1", "-z", "-uall"],
       rutaNorm,
     );
     const tokensStatus = resStatus.salidaEstandar.split("\0");
@@ -664,8 +700,14 @@ export class ModuloGitReal implements ModuloGit {
     const rutaNorm = resolve(rutaWorktree);
     await this.validarWorktreeBatuta(rutaNorm);
 
+    if (commit.startsWith("-")) {
+      throw new Error(
+        `El commit "${commit}" no es válido (no puede comenzar con guión).`,
+      );
+    }
+
     const resVerify = await this.ejecutarGit(
-      `rev-parse --verify "${commit}^{commit}"`,
+      ["rev-parse", "--verify", `${commit}^{commit}`],
       rutaNorm,
     );
     if (resVerify.codigoSalida !== 0) {
@@ -673,9 +715,18 @@ export class ModuloGitReal implements ModuloGit {
         `El commit "${commit}" no existe en el repositorio para restaurar.`,
       );
     }
+    const hashCompleto = resVerify.salidaEstandar.trim();
+    if (!hashCompleto) {
+      throw new Error(
+        `No se pudo obtener el hash del commit "${commit}" para restaurar.`,
+      );
+    }
 
-    // Descartar cambios versionados
-    const resReset = await this.ejecutarGit(`reset --hard "${commit}"`, rutaNorm);
+    // Descartar cambios versionados usando el hash completo verificado (seguro contra inyección de opciones)
+    const resReset = await this.ejecutarGit(
+      ["reset", "--hard", hashCompleto],
+      rutaNorm,
+    );
     if (resReset.codigoSalida !== 0) {
       throw new Error(
         `Error al ejecutar reset --hard hacia "${commit}": ${resReset.salidaError}`,
@@ -683,7 +734,7 @@ export class ModuloGitReal implements ModuloGit {
     }
 
     // Descartar archivos nuevos sin seguimiento conservando los ignorados (.gitignore)
-    const resClean = await this.ejecutarGit("clean -fd", rutaNorm);
+    const resClean = await this.ejecutarGit(["clean", "-fd"], rutaNorm);
     if (resClean.codigoSalida !== 0) {
       throw new Error(
         `Error al limpiar archivos nuevos sin seguimiento: ${resClean.salidaError}`,
@@ -704,7 +755,7 @@ export class ModuloGitReal implements ModuloGit {
 
     // 3. Eliminar worktree con Git
     let resRemove = await this.ejecutarGit(
-      `worktree remove --force "${rutaNorm}"`,
+      ["worktree", "remove", "--force", "--", rutaNorm],
       dirPrincipal,
     );
 
@@ -712,7 +763,7 @@ export class ModuloGitReal implements ModuloGit {
     if (resRemove.codigoSalida !== 0) {
       await new Promise((r) => setTimeout(r, 250));
       resRemove = await this.ejecutarGit(
-        `worktree remove --force "${rutaNorm}"`,
+        ["worktree", "remove", "--force", "--", rutaNorm],
         dirPrincipal,
       );
 
@@ -727,16 +778,16 @@ export class ModuloGitReal implements ModuloGit {
     }
 
     // 4. Eliminar la rama batuta/<run_id>
-    await this.ejecutarGit(`branch -D "${rama}"`, dirPrincipal);
+    await this.ejecutarGit(["branch", "-D", "--", rama], dirPrincipal);
 
     // 5. Limpiar registros de worktrees
-    await this.ejecutarGit("worktree prune", dirPrincipal);
+    await this.ejecutarGit(["worktree", "prune"], dirPrincipal);
   }
 
   async listarWorktrees(directorioRepo: string): Promise<WorktreeListado[]> {
     const repoAbs = resolve(directorioRepo);
     const resList = await this.ejecutarGit(
-      "worktree list --porcelain",
+      ["worktree", "list", "--porcelain"],
       repoAbs,
     );
     if (resList.codigoSalida !== 0) {
@@ -764,7 +815,7 @@ export class ModuloGitReal implements ModuloGit {
 
     // Ramas huérfanas: ramas batuta/* cuyo runId no está activo
     const resBranches = await this.ejecutarGit(
-      'branch --list "batuta/*" --format="%(refname:short)"',
+      ["branch", "--list", "batuta/*", "--format=%(refname:short)"],
       repoAbs,
     );
     const ramasLocales = resBranches.salidaEstandar

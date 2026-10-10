@@ -1,0 +1,15 @@
+{
+  "_nota": "Fixture sintético para pruebas unitarias sin conexión a red",
+  "type": "result",
+  "subtype": "error",
+  "is_error": true,
+  "terminal_reason": "max_turns",
+  "stop_reason": "max_turns",
+  "num_turns": 15,
+  "duration_ms": 12500,
+  "usage": {
+    "input_tokens": 8500,
+    "output_tokens": 1200
+  },
+  "result": "Maximum turns (15) reached without completing task"
+}

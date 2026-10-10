@@ -9,6 +9,7 @@ export interface OpcionesEjecucionComando {
   limiteSalidaBytes?: number;
   entornoExtra?: Record<string, string>;
   shell?: boolean | string;
+  onStdoutLine?: (linea: string, abortar: (motivo?: string) => void) => void;
 }
 
 /** Resultado estructurado de la ejecución de un comando. */
@@ -18,9 +19,19 @@ export interface ResultadoComando {
   salidaError: string;
   duracionMs: number;
   timeoutVencido: boolean;
+  canceladoPor?: string;
   bytesDescartadosStdout?: number;
   bytesDescartadosStderr?: number;
   error?: string;
+}
+
+/** Opciones para la ejecución de un comando por vector de argumentos. */
+export interface OpcionesEjecucionArgs {
+  cwd?: string;
+  timeoutMs?: number;
+  limiteSalidaBytes?: number;
+  entornoExtra?: Record<string, string>;
+  onStdoutLine?: (linea: string, abortar: (motivo?: string) => void) => void;
 }
 
 /** Interfaz inyectable para el ejecutor de comandos. */
@@ -28,6 +39,11 @@ export interface EjecutorComandos {
   ejecutar(
     comando: string,
     opciones?: OpcionesEjecucionComando,
+  ): Promise<ResultadoComando>;
+  ejecutarArgs(
+    ejecutable: string,
+    args: readonly string[],
+    opciones?: OpcionesEjecucionArgs,
   ): Promise<ResultadoComando>;
 }
 
@@ -65,10 +81,12 @@ export const VARIABLES_ENTORNO_PERMITIDAS: readonly string[] = [
 export function construirEntornoLimpio(
   entornoBase: NodeJS.ProcessEnv = process.env,
   entornoExtra: Record<string, string> = {},
+  nombresPermitidosExtra: readonly string[] = [],
 ): NodeJS.ProcessEnv {
-  const permitidasNormalizadas = new Set(
-    VARIABLES_ENTORNO_PERMITIDAS.map((v) => v.toUpperCase()),
-  );
+  const permitidasNormalizadas = new Set([
+    ...VARIABLES_ENTORNO_PERMITIDAS.map((v) => v.toUpperCase()),
+    ...nombresPermitidosExtra.map((v) => v.toUpperCase()),
+  ]);
 
   const limpio: Record<string, string> = {};
 
@@ -241,6 +259,113 @@ export class EjecutorComandosReal implements EjecutorComandos {
     this.timeoutPorDefectoMs = opciones?.timeoutPorDefectoMs ?? 120_000;
   }
 
+  private async lanzarProceso(
+    crearChild: () => ReturnType<typeof spawn>,
+    inicio: number,
+    timeoutMs: number,
+    limiteBytes: number,
+    onStdoutLine?: (linea: string, abortar: (motivo?: string) => void) => void,
+  ): Promise<ResultadoComando> {
+    const bufferStdout = new BufferTruncado(limiteBytes);
+    const bufferStderr = new BufferTruncado(limiteBytes);
+
+    return new Promise<ResultadoComando>((resolve) => {
+      let timedOut = false;
+      let canceladoPor: string | undefined;
+      let timer: NodeJS.Timeout | null = null;
+      let terminado = false;
+
+      let child;
+      try {
+        child = crearChild();
+      } catch (error) {
+        return resolve({
+          codigoSalida: null,
+          salidaEstandar: "",
+          salidaError: `Error al iniciar el comando: ${detalleError(error)}`,
+          duracionMs: Date.now() - inicio,
+          timeoutVencido: false,
+          error: detalleError(error),
+        });
+      }
+
+      const abortar = (motivo?: string): void => {
+        if (terminado) return;
+        canceladoPor = motivo ?? "cancelado";
+        if (child.pid) {
+          matarArbolProcesos(child.pid);
+        }
+      };
+
+      const finalizar = (codigo: number | null): void => {
+        if (terminado) return;
+        terminado = true;
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+
+        const { texto: salidaEstandar, descartados: descartadosStdout } =
+          bufferStdout.obtenerResultado();
+        const { texto: salidaError, descartados: descartadosStderr } =
+          bufferStderr.obtenerResultado();
+
+        resolve({
+          codigoSalida: timedOut ? null : codigo,
+          salidaEstandar,
+          salidaError,
+          duracionMs: Date.now() - inicio,
+          timeoutVencido: timedOut,
+          canceladoPor,
+          bytesDescartadosStdout:
+            descartadosStdout > 0 ? descartadosStdout : undefined,
+          bytesDescartadosStderr:
+            descartadosStderr > 0 ? descartadosStderr : undefined,
+        });
+      };
+
+      if (timeoutMs > 0) {
+        timer = setTimeout(() => {
+          timedOut = true;
+          if (child.pid) {
+            matarArbolProcesos(child.pid);
+          }
+        }, timeoutMs);
+      }
+
+      let remanenteStdout = "";
+      child.stdout?.on("data", (chunk: Buffer) => {
+        bufferStdout.agregar(chunk);
+        if (onStdoutLine) {
+          remanenteStdout += chunk.toString("utf8");
+          const partes = remanenteStdout.split(/\r?\n/);
+          remanenteStdout = partes.pop() ?? "";
+          for (const linea of partes) {
+            if (linea.trim().length > 0) {
+              onStdoutLine(linea, abortar);
+            }
+          }
+        }
+      });
+
+      child.stderr?.on("data", (chunk: Buffer) => {
+        bufferStderr.agregar(chunk);
+      });
+
+      child.on("error", (error) => {
+        bufferStderr.agregar(Buffer.from(detalleError(error)));
+        finalizar(null);
+      });
+
+      child.on("close", (codigo) => {
+        if (remanenteStdout.trim().length > 0 && onStdoutLine) {
+          onStdoutLine(remanenteStdout, abortar);
+        }
+        finalizar(codigo);
+      });
+    });
+  }
+
   async ejecutar(
     comando: string,
     opciones?: OpcionesEjecucionComando,
@@ -263,102 +388,82 @@ export class EjecutorComandosReal implements EjecutorComandos {
     const limiteBytes = opciones?.limiteSalidaBytes ?? this.limiteSalidaPorDefecto;
     const env = construirEntornoLimpio(process.env, opciones?.entornoExtra);
     const shell = opciones?.shell ?? false;
+    const detached = process.platform !== "win32";
 
-    const bufferStdout = new BufferTruncado(limiteBytes);
-    const bufferStderr = new BufferTruncado(limiteBytes);
-
-    return new Promise<ResultadoComando>((resolve) => {
-      let timedOut = false;
-      let timer: NodeJS.Timeout | null = null;
-      let terminado = false;
-
-      // En POSIX detached: true para crear un nuevo grupo de procesos
-      const detached = process.platform !== "win32";
-
-      let child;
-      try {
-        if (shell) {
-          child = spawn(comando, {
+    if (shell) {
+      return this.lanzarProceso(
+        () =>
+          spawn(comando, {
             cwd,
             env,
             shell,
             detached,
             windowsHide: true,
             stdio: ["ignore", "pipe", "pipe"],
-          });
-        } else {
-          const { ejecutable, args } = separarComandoYArgumentos(comando);
-          child = spawn(ejecutable, args, {
-            cwd,
-            env,
-            shell: false,
-            detached,
-            windowsHide: true,
-            stdio: ["ignore", "pipe", "pipe"],
-          });
-        }
-      } catch (error) {
-        return resolve({
-          codigoSalida: null,
-          salidaEstandar: "",
-          salidaError: `Error al iniciar el comando: ${detalleError(error)}`,
-          duracionMs: Date.now() - inicio,
-          timeoutVencido: false,
-          error: detalleError(error),
-        });
-      }
+          }),
+        inicio,
+        timeoutMs,
+        limiteBytes,
+        opciones?.onStdoutLine,
+      );
+    }
 
-      const finalizar = (codigo: number | null): void => {
-        if (terminado) return;
-        terminado = true;
-        if (timer) {
-          clearTimeout(timer);
-          timer = null;
-        }
+    const { ejecutable, args } = separarComandoYArgumentos(comando);
+    return this.lanzarProceso(
+      () =>
+        spawn(ejecutable, args, {
+          cwd,
+          env,
+          shell: false,
+          detached,
+          windowsHide: true,
+          stdio: ["ignore", "pipe", "pipe"],
+        }),
+      inicio,
+      timeoutMs,
+      limiteBytes,
+      opciones?.onStdoutLine,
+    );
+  }
 
-        const { texto: salidaEstandar, descartados: descartadosStdout } =
-          bufferStdout.obtenerResultado();
-        const { texto: salidaError, descartados: descartadosStderr } =
-          bufferStderr.obtenerResultado();
+  async ejecutarArgs(
+    ejecutable: string,
+    args: readonly string[],
+    opciones?: OpcionesEjecucionArgs,
+  ): Promise<ResultadoComando> {
+    const inicio = Date.now();
+    const cwd = opciones?.cwd;
 
-        resolve({
-          codigoSalida: timedOut ? null : codigo,
-          salidaEstandar,
-          salidaError,
-          duracionMs: Date.now() - inicio,
-          timeoutVencido: timedOut,
-          bytesDescartadosStdout:
-            descartadosStdout > 0 ? descartadosStdout : undefined,
-          bytesDescartadosStderr:
-            descartadosStderr > 0 ? descartadosStderr : undefined,
-        });
+    if (cwd !== undefined && !existsSync(cwd)) {
+      return {
+        codigoSalida: null,
+        salidaEstandar: "",
+        salidaError: `Directorio de trabajo no existe: ${cwd}`,
+        duracionMs: Date.now() - inicio,
+        timeoutVencido: false,
+        error: `ENOENT: directorio no existe: ${cwd}`,
       };
+    }
 
-      if (timeoutMs > 0) {
-        timer = setTimeout(() => {
-          timedOut = true;
-          if (child.pid) {
-            matarArbolProcesos(child.pid);
-          }
-        }, timeoutMs);
-      }
+    const timeoutMs = opciones?.timeoutMs ?? this.timeoutPorDefectoMs;
+    const limiteBytes = opciones?.limiteSalidaBytes ?? this.limiteSalidaPorDefecto;
+    const env = construirEntornoLimpio(process.env, opciones?.entornoExtra);
+    const detached = process.platform !== "win32";
 
-      child.stdout?.on("data", (chunk: Buffer) => {
-        bufferStdout.agregar(chunk);
-      });
-
-      child.stderr?.on("data", (chunk: Buffer) => {
-        bufferStderr.agregar(chunk);
-      });
-
-      child.on("error", (error) => {
-        bufferStderr.agregar(Buffer.from(detalleError(error)));
-        finalizar(null);
-      });
-
-      child.on("close", (codigo) => {
-        finalizar(codigo);
-      });
-    });
+    return this.lanzarProceso(
+      () =>
+        spawn(ejecutable, [...args], {
+          cwd,
+          env,
+          shell: false,
+          detached,
+          windowsHide: true,
+          stdio: ["ignore", "pipe", "pipe"],
+        }),
+      inicio,
+      timeoutMs,
+      limiteBytes,
+      opciones?.onStdoutLine,
+    );
   }
 }
