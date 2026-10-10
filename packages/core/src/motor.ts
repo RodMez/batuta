@@ -976,7 +976,7 @@ export class MotorFlujo {
     const plan = parsePlan(JSON.parse(planTexto) as unknown);
     const spec = await this.deps.fs.leerArchivo(rutaSpec(dirBatuta, runId));
     const reglasRepo = await this.leerReglas(dirBatuta, runId);
-    let progreso = await this.leerProgreso(dirBatuta, runId);
+    const progreso = await this.leerProgreso(dirBatuta, runId);
     const subtarea = plan.subtareas[indice];
     if (!subtarea) return null;
     const sub = progreso.subtareas[indice];
@@ -1098,7 +1098,6 @@ export class MotorFlujo {
       await this.guardarProgreso(dirBatuta, runId, progreso);
       if (costo.desconocido) {
         await this.emitirAdvertenciaCostos(dirBatuta, runId, progreso);
-        progreso = await this.leerProgreso(dirBatuta, runId);
       }
       // Límite en dólares por llamada cuando hay precios (CA-11).
       if (
@@ -1138,7 +1137,6 @@ export class MotorFlujo {
           { modelo: decision.modelo, costoUsd: costo.desconocido ? 0 : (costo.montoUsd ?? 0), yaEnVerify: false },
         );
         if (salida) return salida;
-        progreso = await this.leerProgreso(dirBatuta, runId);
         continuacionResumen = null;
         continue;
       }
@@ -1192,7 +1190,6 @@ export class MotorFlujo {
             { modelo: decision.modelo, costoUsd: 0, yaEnVerify: false },
           );
           if (salida) return salida;
-          progreso = await this.leerProgreso(dirBatuta, runId);
           continuacionResumen = null;
           continue;
         }
@@ -1232,7 +1229,6 @@ export class MotorFlujo {
           { modelo: decision.modelo, costoUsd: 0, yaEnVerify: false },
         );
         if (salida) return salida;
-        progreso = await this.leerProgreso(dirBatuta, runId);
         continuacionResumen = null;
         continue;
       }
@@ -1251,11 +1247,9 @@ export class MotorFlujo {
         costo.desconocido ? 0 : (costo.montoUsd ?? 0),
       );
       if (evaluacion === "completada") {
-        progreso = await this.leerProgreso(dirBatuta, runId);
         return null;
       }
       if (evaluacion !== null) return evaluacion;
-      progreso = await this.leerProgreso(dirBatuta, runId);
     }
   }
 
