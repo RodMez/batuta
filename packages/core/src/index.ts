@@ -86,16 +86,19 @@ export {
   dirRun,
   dirRuns,
   generarRunId,
+  InfoBloqueoSchema,
+  parsearBloqueo,
   RunIdSchema,
   RunStore,
   rutaBloqueoRun,
   rutaEstado,
   rutaEventos,
 } from "./runStore.js";
-export type { NuevoEvento, ResultadoRestore } from "./runStore.js";
+export type { InfoBloqueo, NuevoEvento, ResultadoRestore } from "./runStore.js";
 export {
   detalleError,
   esNoEncontrado,
+  existeProceso,
   relojSistema,
   sistemaArchivosNode,
 } from "./sistema.js";
@@ -110,3 +113,40 @@ export {
 } from "./state.js";
 export type { Puerta, RunState, RunStatus } from "./state.js";
 export { formatZodError, stringifyIssuePath } from "./validation.js";
+export {
+  BufferTruncado,
+  construirEntornoLimpio,
+  EjecutorComandosReal,
+  matarArbolProcesos,
+  VARIABLES_ENTORNO_PERMITIDAS,
+} from "./commandRunner.js";
+export type {
+  EjecutorComandos,
+  OpcionesEjecucionComando,
+  ResultadoComando,
+} from "./commandRunner.js";
+export {
+  crearPayloadGate,
+  ejecutarGates,
+  GateEjecutadoPayloadSchema,
+  InformeGatesSchema,
+  ResultadoGateSchema,
+} from "./gatesRunner.js";
+export type {
+  GateEjecutadoPayload,
+  InformeGates,
+  OpcionesEjecucionGates,
+  ResultadoGate,
+} from "./gatesRunner.js";
+export {
+  coincideRutaProhibida,
+  detectarSecretoEnLinea,
+  evaluarDiff,
+  normalizarRutaDiff,
+} from "./diffPolicy.js";
+export type {
+  CambioArchivo,
+  PoliticaDiff,
+  TipoViolacionDiff,
+  ViolacionDiff,
+} from "./diffPolicy.js";
