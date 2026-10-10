@@ -306,6 +306,7 @@ export function applyEvent(estado: RunState, evento: BatutaEvent): RunState {
       return { ...base, estado: retomar_en };
     }
     case "ejecucion_reanudada":
+    case "advertencia":
     case "contexto_resumido": {
       return base;
     }

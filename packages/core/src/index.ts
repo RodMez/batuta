@@ -181,6 +181,17 @@ export type {
   WorktreesHuerfanos,
 } from "./git.js";
 export {
+  INFORME_FALLO_MAX_CHARS,
+  INFORME_FALLO_MAX_LINEAS,
+  firmaFallo,
+  recortarInformeFallo,
+} from "./informeFallo.js";
+export type { FalloEvaluacion } from "./informeFallo.js";
+export { NotificadorNulo } from "./notificador.js";
+export type { Aviso, Notificador, TipoAviso } from "./notificador.js";
+export { seleccionarModelo } from "./seleccionModelo.js";
+export type { DecisionModelo } from "./seleccionModelo.js";
+export {
   calcularCostoEstimado,
   cargarPlantillaPrompt,
   ClaudeCodeRunner,
