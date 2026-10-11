@@ -1,0 +1,6 @@
+{
+  "llamadas": [
+    { "archivos": { "saludo.txt": "Hola desde Batuta\n" } },
+    { "archivos": { "despedida.txt": "Adiós desde Batuta\n" } }
+  ]
+}

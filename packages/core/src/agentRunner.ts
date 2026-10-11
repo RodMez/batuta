@@ -1,6 +1,7 @@
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 import {
   AgentInput,
   AgentOutput,
@@ -18,13 +19,16 @@ import { ofuscarSecretos } from "./diffPolicy.js";
 import { formatZodError } from "./validation.js";
 
 /** Motivos de fallo tipados para la ejecución de un agente. */
-export type MotivoFalloAgente =
-  | "timeout"
-  | "presupuesto_agotado"
-  | "turnos_agotados"
-  | "salida_invalida"
-  | "error_herramienta"
-  | "error_proceso";
+export const MotivoFalloAgenteSchema = z.enum([
+  "timeout",
+  "presupuesto_agotado",
+  "turnos_agotados",
+  "salida_invalida",
+  "error_herramienta",
+  "error_proceso",
+]);
+
+export type MotivoFalloAgente = z.infer<typeof MotivoFalloAgenteSchema>;
 
 /** Límites de ejecución específicos para la llamada del agente. */
 export interface LimitesLlamada {

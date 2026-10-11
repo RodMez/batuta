@@ -187,15 +187,21 @@ export {
   recortarInformeFallo,
 } from "./informeFallo.js";
 export type { FalloEvaluacion } from "./informeFallo.js";
+export { listarEjecuciones } from "./ejecuciones.js";
 export { NotificadorNulo } from "./notificador.js";
+export {
+  GuionLlamadaSchema,
+  GuionSimuladoSchema,
+  parseGuion,
+  parseGuionJson,
+  RunnerGuionado,
+} from "./guionRunner.js";
+export type { GuionLlamada, GuionSimulado } from "./guionRunner.js";
 export type { Aviso, Notificador, TipoAviso } from "./notificador.js";
 export { seleccionarModelo } from "./seleccionModelo.js";
 export type { DecisionModelo } from "./seleccionModelo.js";
-export {
-  MotorFlujo,
-  hashContenido,
-  siguientePaso,
-} from "./motor.js";
+export { MotorFlujo } from "./motor.js";
+export { hashContenido } from "./motorTipos.js";
 export type {
   DependenciasMotor,
   OpcionesIniciar,
@@ -203,13 +209,51 @@ export type {
   ProgresoMotor,
   ProgresoSubtarea,
   ResultadoMotor,
-} from "./motor.js";
+} from "./motorTipos.js";
+export { siguientePaso, progresoInicial } from "./motorDecision.js";
+export { construirPrompt, describirSubtarea } from "./motorPrompts.js";
+export {
+  comprobarLimites,
+  emitirAdvertenciaCostos,
+  fallarEjecucion,
+  registrarUso,
+} from "./motorLimites.js";
+export {
+  aprobarPuerta,
+  limpiarWorktree,
+  rechazarPuerta,
+  revisarHashes,
+  solicitarAprobacion,
+  textoSolicitud,
+} from "./motorAprobaciones.js";
+export {
+  decidirRolReintento,
+  ejecutarSubtarea,
+  evaluarExito,
+  registrarFalloIntento,
+} from "./motorSubtareas.js";
+export { generarCierre, textoResumen } from "./motorResumen.js";
+export {
+  dirInformes,
+  guardarProgreso,
+  leerConfigRun,
+  leerProgreso,
+  leerReglasRepo,
+  rutaConfig,
+  rutaEspera,
+  rutaMotor,
+  rutaPlan,
+  rutaResumen,
+  rutaSolicitud,
+  rutaSpec,
+} from "./motorRutas.js";
 export {
   calcularCostoEstimado,
   cargarPlantillaPrompt,
   ClaudeCodeRunner,
   construirInvocacionClaudeCode,
   FakeRunner,
+  MotivoFalloAgenteSchema,
   parsearSalidaClaudeCode,
   verificarPreflightClaudeCode,
 } from "./agentRunner.js";

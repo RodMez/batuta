@@ -1,0 +1,18 @@
+{
+  "subtareas": [
+    {
+      "id": "SUB-01",
+      "titulo": "Crear saludo",
+      "archivos": ["saludo.txt"],
+      "criterios": ["CA-1"],
+      "complejidad": "baja"
+    },
+    {
+      "id": "SUB-02",
+      "titulo": "Crear despedida",
+      "archivos": ["despedida.txt"],
+      "criterios": ["CA-1"],
+      "complejidad": "baja"
+    }
+  ]
+}
