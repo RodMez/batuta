@@ -7,7 +7,8 @@ import { formatZodError } from "./validation.js";
  * (sección 4: INTAKE→SPEC→PLAN→IMPLEMENT→VERIFY→CHECKPOINT→REVIEW→
  * FINALIZE→DONE, más RETRY/DEBUG, FAILED/ABORTED y WAITING_INPUT),
  * los gates, los reintentos, las aprobaciones humanas (H0–H3),
- * los límites y la reanudación, más la condensación de contexto (`resumen`).
+ * los límites y la reanudación, más la condensación de contexto (`resumen`)
+ * y avisos no bloqueantes (`advertencia`, p. ej. costos desconocidos).
  */
 export const EVENT_TYPES = [
   "ejecucion_iniciada",
@@ -28,6 +29,7 @@ export const EVENT_TYPES = [
   "entrada_recibida",
   "ejecucion_reanudada",
   "contexto_resumido",
+  "advertencia",
   "ejecucion_completada",
   "ejecucion_fallida",
   "ejecucion_abortada",

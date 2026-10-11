@@ -4,17 +4,26 @@ import { tmpdir } from "node:os";
 import {
   ClaudeCodeRunner,
   EjecutorComandosReal,
+  crearContextoCaptura,
+  crearInputCaptura,
+  modeloCapturaDesdeEntorno,
   ofuscarSecretos,
+  VARIABLES_MODELO_CAPTURA,
   verificarPreflightClaudeCode,
 } from "../dist/index.js";
 
+const MODELO_POR_DEFECTO = "claude-haiku-5-5";
+
 async function main() {
-  console.log("Verificando preflight de Claude Code...");
+  const modelo = modeloCapturaDesdeEntorno(process.env) ?? MODELO_POR_DEFECTO;
+  console.log(`Verificando preflight de Claude Code (modelo: ${modelo})...`);
   const ejecutor = new EjecutorComandosReal();
   const preflight = await verificarPreflightClaudeCode(ejecutor);
 
-  if (!preflight.instalado) {
-    console.error("Error: Claude Code CLI no está instalado en el sistema.");
+  if (!preflight.ok) {
+    console.error(
+      `Error: Claude Code CLI no utilizable: ${preflight.mensaje ?? "sin detalles"}`,
+    );
     process.exit(1);
   }
 
@@ -36,32 +45,20 @@ async function main() {
     await ejecutor.ejecutarArgs("git", ["config", "user.name", "Batuta Capture"], { cwd: tmpRepo });
     await ejecutor.ejecutarArgs("git", ["config", "user.email", "capture@batuta.local"], { cwd: tmpRepo });
     await writeFile(join(tmpRepo, "README.md"), "# Repo Desechable para Captura\nPrueba de captura real.\n", "utf8");
-    await ejecutor.ejecutarArgs("git", ["add", "README.md"], { cwd: tmpRepo });
+    await ejecutor.ejecutarArgs("git", ["add", "--", "README.md"], { cwd: tmpRepo });
     await ejecutor.ejecutarArgs("git", ["commit", "-m", "commit inicial"], { cwd: tmpRepo });
 
-    const runner = new ClaudeCodeRunner(ejecutor);
-    const input = {
-      task_id: "CAPTURE-01",
-      agent_role: "architect",
-      spec_path: "README.md",
-      allowed_files: ["README.md"],
-      budget_limit_usd: 0.05,
+    const config = {
+      proyecto: tmpRepo,
+      gates: [{ nombre: "noop", comando: "node -e \"process.exit(0)\"", timeout_seg: 30 }],
+      variables_modelo: [...VARIABLES_MODELO_CAPTURA],
     };
-
-    const context = {
-      cwd: tmpRepo,
-      rol: "architect",
-      modeloEfectivo: "claude-3-5-haiku-latest",
-      limites: { maxPasos: 2, timeoutMs: 30000 },
-      permisos: { lectura: true, escritura: false, comandosPermitidos: [] },
-      entorno: {},
-      variablesModeloPermitidas: ["ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL"],
-      prompt: "Analiza el archivo README.md y responde con el esquema JSON requerido.",
-      runId: "capture",
-    };
+    const runner = new ClaudeCodeRunner(ejecutor, config);
+    const input = crearInputCaptura();
+    const contexto = crearContextoCaptura(tmpRepo, modelo);
 
     console.log("Invocando Claude Code en repositorio desechable con tope de $0.05 USD...");
-    const res = await runner.ejecutar(input, context);
+    const res = await runner.ejecutar(input, contexto);
 
     const destinoDir = join(import.meta.dirname, "..", "test", "fixtures", "claude-outputs", "reales");
     await mkdir(destinoDir, { recursive: true });

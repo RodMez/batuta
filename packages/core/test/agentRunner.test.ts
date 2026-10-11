@@ -157,7 +157,34 @@ describe("construirInvocacionClaudeCode (CA-3)", () => {
     expect(args).toContain("Read,Grep,Glob");
     expect(args).not.toContain("Edit");
     expect(args).not.toContain("Bash");
+    expect(args).not.toContain("--allowed-tools");
+    // El prompt siempre va tras `--` como último posicional
+    expect(args[args.length - 2]).toBe("--");
     expect(args[args.length - 1]).toBe("Inspecciona el repositorio");
+  });
+
+  it("separa el prompt con `--` sin prompt de sistema ni esquema", () => {
+    const { args } = construirInvocacionClaudeCode({
+      modelo: "m-test",
+      prompt: "hola",
+      permisos: { soloLectura: true },
+    });
+
+    expect(args[args.length - 2]).toBe("--");
+    expect(args[args.length - 1]).toBe("hola");
+    expect(args).not.toContain("--append-system-prompt");
+    expect(args).not.toContain("--json-schema");
+  });
+
+  it("un prompt que empieza por `--` no se interpreta como flag gracias al separador", () => {
+    const { args } = construirInvocacionClaudeCode({
+      modelo: "m-test",
+      prompt: "--help me with this",
+      permisos: { soloLectura: true },
+    });
+
+    expect(args[args.length - 2]).toBe("--");
+    expect(args[args.length - 1]).toBe("--help me with this");
   });
 
   it("construye invocación para rol con escritura y comandos permitidos", () => {
@@ -182,6 +209,39 @@ describe("construirInvocacionClaudeCode (CA-3)", () => {
     expect(allowedToolsArg).toMatch(/Edit/);
     expect(allowedToolsArg).toMatch(/Bash\(npm test\)/);
     expect(allowedToolsArg).toMatch(/Bash\(npm run lint\)/);
+    // El prompt va tras `--`
+    expect(args[args.length - 2]).toBe("--");
+    expect(args[args.length - 1]).toBe("Implementa el cambio");
+  });
+
+  it("rol con escritura sin comandos: sin Bash en --tools pero con --allowed-tools", () => {
+    const { args } = construirInvocacionClaudeCode({
+      modelo: "m-test",
+      prompt: "Edita sin comandos",
+      permisos: { soloLectura: false },
+    });
+
+    const toolsArg = args[args.indexOf("--tools") + 1];
+    expect(toolsArg).toBe("Edit,Write,Read,Grep,Glob");
+    expect(toolsArg).not.toMatch(/Bash/);
+
+    expect(args).toContain("--allowed-tools");
+    const allowedToolsArg = args[args.indexOf("--allowed-tools") + 1];
+    expect(allowedToolsArg).toBe("Read Grep Glob Edit Write");
+    expect(args[args.length - 2]).toBe("--");
+    expect(args[args.length - 1]).toBe("Edita sin comandos");
+  });
+
+  it("rol con escritura con lista vacía equivale a sin comandos", () => {
+    const { args } = construirInvocacionClaudeCode({
+      modelo: "m-test",
+      prompt: "Edita",
+      permisos: { soloLectura: false, comandosPermitidos: [] },
+    });
+
+    const toolsArg = args[args.indexOf("--tools") + 1];
+    expect(toolsArg).not.toMatch(/Bash/);
+    expect(args).toContain("--allowed-tools");
   });
 
   it("construye invocación con esquema estructurado AgentOutput y prompt de sistema", () => {
@@ -644,5 +704,22 @@ describe("cargarPlantillaPrompt", () => {
     expect(promptArch).toContain("Crear spec de pagos");
     expect(promptArch).toContain("SOLO LECTURA");
     expect(promptArch).not.toContain("{{subtarea}}");
+  });
+
+  it("carga la plantilla del debugger con el informe de fallo", async () => {
+    const promptDbg = await cargarPlantillaPrompt("debugger", {
+      subtarea: "SUB-07: Corregir bucle",
+      spec: "SPEC-002",
+      reglas_repo: "Reglas",
+      archivos_permitidos: "src/bucle.ts",
+      informe_fallo: "gate tests falló con salida 1",
+      esquema_salida: '{"type":"object"}',
+    });
+
+    expect(promptDbg).toContain("SUB-07: Corregir bucle");
+    expect(promptDbg).toContain("gate tests falló con salida 1");
+    expect(promptDbg).toContain("NEEDS_INPUT");
+    expect(promptDbg).not.toContain("{{informe_fallo}}");
+    expect(promptDbg).not.toContain("{{subtarea}}");
   });
 });

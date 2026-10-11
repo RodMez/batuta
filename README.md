@@ -60,3 +60,32 @@ Una vez compilado el proyecto con `npm run build`:
 node packages/cli/dist/index.js --version
 ```
 Muestra la versión actual de Batuta (`0.1.0`).
+
+---
+
+## Captura de salidas reales de Claude Code (manual, fuera de `verify`)
+
+El script `scripts/capturar-claude.js` invoca una vez al `architect` (solo
+lectura) en un repositorio desechable con tope de $0.05 USD y guarda la salida
+ofuscada en `packages/core/test/fixtures/claude-outputs/reales/`. No forma
+parte de `npm run verify` ni gasta tokens en las pruebas (usan fixtures
+sintéticos y un `claude` falso).
+
+El modelo se lee de `BATUTA_MODELO` (por defecto: `claude-haiku-5-5`).
+
+Sin proxy (API directa de Anthropic):
+```bash
+set BATUTA_MODELO=claude-haiku-5-5
+set ANTHROPIC_API_KEY=...
+npm run capturar-claude
+```
+
+Con proxy local (por ejemplo Jan en `http://127.0.0.1:1337`): el nombre debe
+ser el que el proxy entienda en ese slot, y se reenvían `ANTHROPIC_API_KEY` y
+`ANTHROPIC_BASE_URL` al subproceso en entorno limpio:
+```bash
+set BATUTA_MODELO=mi-modelo-del-proxy
+set ANTHROPIC_API_KEY=...
+set ANTHROPIC_BASE_URL=http://127.0.0.1:1337
+npm run capturar-claude
+```

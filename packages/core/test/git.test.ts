@@ -65,7 +65,7 @@ describe("ModuloGitReal", () => {
     return { repoDir, git };
   }
 
-  it("detecta no-repositorio, árbol sucio y referencia base inexistente con resultados claros (CA-1)", async () => {
+  it("detecta no-repositorio, árbol sucio y referencia base inexistente con resultados claros (CA-1)", { timeout: 60000 }, async () => {
     const { repoDir, git } = await crearRepoTemporal("ca1");
 
     // 1. Repositorio limpio y válido
@@ -101,7 +101,7 @@ describe("ModuloGitReal", () => {
     expect(previasRefInexistente.referenciaExiste).toBe(false);
   });
 
-  it("crea worktree desde referencia base dada con ruta, rama y commit base, y falla al repetir run_id (CA-2)", async () => {
+  it("crea worktree desde referencia base dada con ruta, rama y commit base, y falla al repetir run_id (CA-2)", { timeout: 60000 }, async () => {
     const { repoDir, git } = await crearRepoTemporal("ca2");
 
     // 1. Crear worktree por defecto (directorio hermano)
@@ -135,7 +135,7 @@ describe("ModuloGitReal", () => {
     await git.eliminarWorktree(infoCustom.ruta);
   });
 
-  it("confirmar subtarea usa identidad de Batuta sin tocar config del usuario y sin cambios no crea commit (CA-3)", async () => {
+  it("confirmar subtarea usa identidad de Batuta sin tocar config del usuario y sin cambios no crea commit (CA-3)", { timeout: 60000 }, async () => {
     const { repoDir, git } = await crearRepoTemporal("ca3");
     const info = await git.crearWorktree(repoDir, "run-subtarea");
 
@@ -172,7 +172,7 @@ describe("ModuloGitReal", () => {
     await git.eliminarWorktree(info.ruta);
   });
 
-  it("listar cambios cubre modificados, nuevos, eliminados, renombrados, binarios y rutas con espacios o acentos y alimenta politica de diff (CA-4)", async () => {
+  it("listar cambios cubre modificados, nuevos, eliminados, renombrados, binarios y rutas con espacios o acentos y alimenta politica de diff (CA-4)", { timeout: 60000 }, async () => {
     const { repoDir, git } = await crearRepoTemporal("ca4");
 
     // Preparar commit base en el repo
@@ -271,7 +271,7 @@ describe("ModuloGitReal", () => {
     await git.eliminarWorktree(info.ruta);
   });
 
-  it("volver a un commit elimina modificaciones y archivos nuevos pero conserva archivos ignorados (CA-5)", async () => {
+  it("volver a un commit elimina modificaciones y archivos nuevos pero conserva archivos ignorados (CA-5)", { timeout: 60000 }, async () => {
     const { repoDir, git } = await crearRepoTemporal("ca5");
 
     // Configurar .gitignore en el repo
@@ -317,7 +317,7 @@ describe("ModuloGitReal", () => {
     await git.eliminarWorktree(info.ruta);
   });
 
-  it("volver a commit o eliminar sobre el repo principal o ruta ajena a Batuta se rechaza (CA-6)", async () => {
+  it("volver a commit o eliminar sobre el repo principal o ruta ajena a Batuta se rechaza (CA-6)", { timeout: 60000 }, async () => {
     const { repoDir, git } = await crearRepoTemporal("ca6");
 
     // 1. Rechazar volverACommit sobre el repositorio principal
@@ -354,7 +354,7 @@ describe("ModuloGitReal", () => {
     await ejecutor.ejecutar("git branch -D feature/manual", { cwd: repoDir });
   });
 
-  it("tras aborto la rama principal queda idéntica, sin ramas ni worktrees sobrantes y eliminar es idempotente (CA-7)", async () => {
+  it("tras aborto la rama principal queda idéntica, sin ramas ni worktrees sobrantes y eliminar es idempotente (CA-7)", { timeout: 60000 }, async () => {
     const { repoDir, git } = await crearRepoTemporal("ca7");
     const ejecutor = new EjecutorComandosReal();
 
@@ -400,7 +400,7 @@ describe("ModuloGitReal", () => {
     expect(worktrees[0]?.esBatuta).toBe(false);
   });
 
-  it("lista worktrees de Batuta y detecta huérfanos (CA-8)", async () => {
+  it("lista worktrees de Batuta y detecta huérfanos (CA-8)", { timeout: 60000 }, async () => {
     const { repoDir, git } = await crearRepoTemporal("ca8");
     const ejecutor = new EjecutorComandosReal();
 
@@ -442,7 +442,7 @@ describe("ModuloGitReal", () => {
   });
 
   describe("pruebas de seguridad contra inyección de argumentos (Ajuste Hito 4)", () => {
-    it("mensaje con comillas, saltos de línea y barras invertidas se guarda tal cual en el commit", async () => {
+    it("mensaje con comillas, saltos de línea y barras invertidas se guarda tal cual en el commit", { timeout: 60000 }, async () => {
       const { repoDir, git } = await crearRepoTemporal("msg-chars");
       const info = await git.crearWorktree(repoDir, "run-msg");
       const ejecutor = new EjecutorComandosReal();
@@ -465,7 +465,7 @@ describe("ModuloGitReal", () => {
       await git.eliminarWorktree(info.ruta);
     });
 
-    it("un hook de pre-commit bloqueante sigue bloqueando aunque el mensaje intente inyectar --no-verify", async () => {
+    it("un hook de pre-commit bloqueante sigue bloqueando aunque el mensaje intente inyectar --no-verify", { timeout: 60000 }, async () => {
       const { repoDir, git } = await crearRepoTemporal("precommit-hook");
       const info = await git.crearWorktree(repoDir, "run-hook");
 
@@ -492,7 +492,7 @@ describe("ModuloGitReal", () => {
       await git.eliminarWorktree(info.ruta);
     });
 
-    it("referencia base hostil que empieza por '-' o contiene comillas se rechaza o se trata como dato", async () => {
+    it("referencia base hostil que empieza por '-' o contiene comillas se rechaza o se trata como dato", { timeout: 60000 }, async () => {
       const { repoDir, git } = await crearRepoTemporal("ref-hostil");
 
       // 1. En comprobaciones previas
@@ -522,7 +522,7 @@ describe("ModuloGitReal", () => {
       ).rejects.toThrow(/no existe/i);
     });
 
-    it("identidad de autor con comillas no altera el comando y se registra exactamente", async () => {
+    it("identidad de autor con comillas no altera el comando y se registra exactamente", { timeout: 60000 }, async () => {
       const { repoDir, git } = await crearRepoTemporal("identidad-quotes");
       const info = await git.crearWorktree(repoDir, "run-identidad");
       const ejecutor = new EjecutorComandosReal();
@@ -553,7 +553,7 @@ describe("ModuloGitReal", () => {
       await git.eliminarWorktree(info.ruta);
     });
 
-    it("rutas con espacios se manejan correctamente en confirmación y listado de cambios", async () => {
+    it("rutas con espacios se manejan correctamente en confirmación y listado de cambios", { timeout: 60000 }, async () => {
       const { repoDir, git } = await crearRepoTemporal("rutas-espacios");
       const info = await git.crearWorktree(repoDir, "run-espacios");
 

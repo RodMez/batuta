@@ -175,21 +175,20 @@ export function construirInvocacionClaudeCode(
     // Rol de solo lectura: herramientas de inspección, sin edición ni comandos
     args.push("--tools", "Read,Grep,Glob");
   } else {
-    // Rol con escritura: definir explícitamente herramientas disponibles con --tools
-    args.push("--tools", "Bash,Edit,Write,Read,Grep,Glob");
-
-    // Si hay comandos permitidos, además restringir con --allowed-tools
-    if (
-      params.permisos.comandosPermitidos &&
-      params.permisos.comandosPermitidos.length > 0
-    ) {
-      const comandosBash = params.permisos.comandosPermitidos
-        .map((cmd) => `Bash(${cmd})`)
-        .join(" ");
+    // Rol con escritura: `--allowed-tools` siempre se pasa, derivado de la
+    // misma fuente que `--tools`. `Bash` solo aparece en `--tools` si hay
+    // comandos permitidos; sin ellos el rol puede editar pero no ejecutar.
+    const comandos = params.permisos.comandosPermitidos ?? [];
+    if (comandos.length > 0) {
+      args.push("--tools", "Bash,Edit,Write,Read,Grep,Glob");
+      const comandosBash = comandos.map((cmd) => `Bash(${cmd})`).join(" ");
       args.push(
         "--allowed-tools",
         `Read Grep Glob Edit Write ${comandosBash}`,
       );
+    } else {
+      args.push("--tools", "Edit,Write,Read,Grep,Glob");
+      args.push("--allowed-tools", "Read Grep Glob Edit Write");
     }
   }
 
@@ -205,7 +204,10 @@ export function construirInvocacionClaudeCode(
     args.push("--json-schema", schemaStr);
   }
 
-  args.push(params.prompt);
+  // El prompt siempre va tras `--`: un flag variádico como `--tools` o
+  // `--allowed-tools` consumiría el posicional que lo sigue, y un texto que
+  // empiece por guiones se interpretaría como un flag sin el separador.
+  args.push("--", params.prompt);
 
   return { ejecutable: "claude", args };
 }

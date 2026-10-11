@@ -48,6 +48,13 @@ export type { Checkpoint } from "./checkpoints.js";
 export { leerRegistro, leerTextoRegistro, prefijoCompleto } from "./eventLog.js";
 export type { LecturaRegistro } from "./eventLog.js";
 export {
+  MODELO_CAPTURA_POR_DEFECTO,
+  VARIABLES_MODELO_CAPTURA,
+  crearContextoCaptura,
+  crearInputCaptura,
+  modeloCapturaDesdeEntorno,
+} from "./captura.js";
+export {
   EVENT_TYPES,
   EventSchema,
   EventTypeSchema,
@@ -173,6 +180,30 @@ export type {
   WorktreeListado,
   WorktreesHuerfanos,
 } from "./git.js";
+export {
+  INFORME_FALLO_MAX_CHARS,
+  INFORME_FALLO_MAX_LINEAS,
+  firmaFallo,
+  recortarInformeFallo,
+} from "./informeFallo.js";
+export type { FalloEvaluacion } from "./informeFallo.js";
+export { NotificadorNulo } from "./notificador.js";
+export type { Aviso, Notificador, TipoAviso } from "./notificador.js";
+export { seleccionarModelo } from "./seleccionModelo.js";
+export type { DecisionModelo } from "./seleccionModelo.js";
+export {
+  MotorFlujo,
+  hashContenido,
+  siguientePaso,
+} from "./motor.js";
+export type {
+  DependenciasMotor,
+  OpcionesIniciar,
+  PasoSiguiente,
+  ProgresoMotor,
+  ProgresoSubtarea,
+  ResultadoMotor,
+} from "./motor.js";
 export {
   calcularCostoEstimado,
   cargarPlantillaPrompt,
