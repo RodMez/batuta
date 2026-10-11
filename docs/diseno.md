@@ -1,8 +1,8 @@
 # Batuta: sistema orquestador de agentes de IA
 
-> Diseño v0.18 · Plan cerrado, piloto verificado y plan de codificación · 10 de octubre de 2026
+> Diseño v0.19 · Plan cerrado, piloto verificado y plan de codificación · 10 de octubre de 2026
 > Estado: solo planificación. Todavía no hay código ni lenguaje elegido.
-> Las versiones v0.2 a v0.18 incorporan la comparación con ForgeFlow Harness y las decisiones de ejecución, despliegue y avisos (ver el registro de cambios al final).
+> Las versiones v0.2 a v0.19 incorporan la comparación con ForgeFlow Harness y las decisiones de ejecución, despliegue y avisos (ver el registro de cambios al final).
 
 ## 1. Visión
 
@@ -192,7 +192,11 @@ Las aprobaciones guardan el hash del documento aprobado (`spec.md` o `plan.json`
 - `batuta status [run_id]`: muestra el estado y el último evento.
 - `batuta approve <run_id> <gate>`: aprueba un gate humano.
 - `batuta resume <run_id>`: reanuda desde el último checkpoint.
-- `batuta abort <run_id>`: cancela y limpia el worktree.
+- `batuta abort <run_id>`: cancela y limpia el worktree. Pide confirmación (`--yes` la omite).
+- `batuta answer <run_id> <texto>`: responde a una duda crítica (`WAITING_INPUT`) y continúa.
+- `batuta doctor`: comprueba el entorno (repositorio, Git, configuración, herramienta de agentes, precios y variables de modelo) sin gastar nada.
+- Mientras no exista el agente `architect` (hito 8), `batuta run` recibe la especificación y el plan escritos a mano: `batuta run --spec <spec.md> --plan <plan.json>`. `--simulado <guion.json>` usa agentes simulados, para pruebas y demostraciones.
+- Cada llamada ejecuta la ejecución en primer plano hasta la siguiente pausa o el final. Los códigos de salida distinguen el resultado: 0 terminada, 10 pausa por aprobación, 11 pausa por una respuesta, 1 fallida y 2 error de uso o de configuración.
 - `batuta init`: prepara un repositorio nuevo (commit inicial, `AGENTS.md` y carpeta de specs).
 
 ### Manejo de ambigüedad
@@ -303,6 +307,8 @@ Se usa un arranque mínimo de la herramienta (en Claude Code, la opción `--bare
 batuta.yaml             # configuración
 AGENTS.md               # reglas del repositorio
 ```
+
+`batuta run` añade `.batuta/` al archivo `.git/info/exclude` del repositorio, para que la carpeta de ejecuciones no cuente como cambios sin confirmar y no ensucie el árbol de trabajo.
 
 ### Plantilla de especificación (`spec.md`)
 
@@ -642,7 +648,8 @@ Los hitos fijan el objetivo y el criterio de terminación. El agente puede propo
 - **Hito 3:** aceptado (91 pruebas, CI en verde en Linux y Windows) tras corregir una prueba de terminación de procesos mal planteada. Se había fusionado en `main` con el CI en rojo y se revirtió, así que se restaura con un PR que revierte el revert y fusiona la rama corregida.
 - **Hito 4:** aceptado y fusionado (100 pruebas, CI en verde; las pruebas no dejan worktrees ni ramas sobrantes). La revisión encontró un fallo de seguridad: los comandos de Git se arman como texto con el mensaje de commit y las referencias interpolados, y un mensaje con comillas puede inyectar argumentos (se comprobó que `--no-verify` salta un hook que bloquea el commit). Se corrige como primer ajuste del hito 5.
 - **Hito 5:** aceptado y fusionable (127 pruebas, CI en verde en Linux y Windows) tras corregir una prueba de Git en Linux, el límite de turnos en vivo y el aislamiento con `--bare`. La revisión dejó tres ajustes previos para el hito 6: separar el prompt con `--`, coherencia de permisos de los roles con escritura y un script de captura probado. La captura real de salidas de Claude Code (criterios CA-4 y CA-11) sigue pendiente de una llamada con credenciales.
-- **Hito 6:** en preparación.
+- **Hito 6:** aceptado (173 pruebas, CI en verde en Linux y Windows). La revisión encontró que la puerta H2 nunca se solicitaba, y se corrigió antes de fusionar. Lección registrada: cada puerta H0 a H3 debe tener al menos una prueba con la puerta activada, también en reanudación. Queda un límite conocido: un cambio de spec o plan después de superar su puerta solo invalida la aprobación, sin volver a solicitarla.
+- **Hito 7:** en preparación.
 
 ### Estrategia de pruebas
 
@@ -690,6 +697,9 @@ Revisores independientes, enrutamiento por complejidad, avisos por Telegram, `ba
 1. **Estrategia de `node_modules` con subtareas en paralelo** (Fase 3), descrita en la sección 18.
 
 ## 21. Registro de cambios
+
+**v0.19**
+- Revisión del hito 6: aceptado tras corregir H2 y H3. Comandos nuevos de la CLI (`answer`, `doctor`), códigos de salida, `--spec`, `--plan` y `--simulado` en la sección 4, y exclusión automática de `.batuta/` en la sección 6.
 
 **v0.18**
 - Revisión de las correcciones del hito 5: aceptado con tres ajustes previos para el hito 6. Reglas del motor en la sección 4 (hash de los documentos aprobados y reanudación) y la política de diff pasa a evaluarse primero.
