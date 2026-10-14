@@ -17,20 +17,38 @@ export interface OpcionesPreflight {
   configPath: string;
   refBase?: string;
   simulado: boolean;
+  skipModelCheck?: boolean;
 }
+
+/** Limpia secuencias ANSI de terminal para evitar spoofing en el detalle. */
+function limpiarAnsi(texto: string): string {
+  return texto.replace(/\x1b\][^\x07]*\x07|\x1b\[[0-9;?]*[a-zA-Z]|\r/g, "");
+}
+
+const ID_MODELO_AGY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
 
 /** Extrae la lista de identificadores de modelos a partir de la salida de 'agy models'. */
 export function parsearModelosAgy(salida: string): string[] {
-  const lineas = salida.split(/\r?\n/);
+  const lineas = limpiarAnsi(salida).split(/\r?\n/);
   const modelos: string[] = [];
-  for (const l of lineas) {
+  const vistos = new Set<string>();
+  for (const l of lineas.slice(0, 500)) {
     const trimmed = l.trim();
     if (!trimmed || trimmed.toLowerCase().startsWith("fetching")) {
       continue;
     }
+    // Omitir cabeceras tipo "MODEL ..." y separadores.
+    if (/^model\b/i.test(trimmed) || /^---+$/.test(trimmed)) {
+      continue;
+    }
     const partes = trimmed.split(/\s+/);
-    if (partes[0]) {
-      modelos.push(partes[0]);
+    const id = partes[0]?.replace(/^\uFEFF/, "") ?? "";
+    if (!id || !ID_MODELO_AGY.test(id)) {
+      continue;
+    }
+    if (!vistos.has(id)) {
+      vistos.add(id);
+      modelos.push(id);
     }
   }
   return modelos;
@@ -154,12 +172,31 @@ export async function ejecutarChequeos(
           (m) => !modelosDisponibles.includes(m),
         );
 
-        if (modelosFaltantes.length > 0) {
+        if (modelosDisponibles.length === 0) {
           chequeos.push({
             nombre: "herramienta",
-            estado: "error",
-            detalle: `Antigravity CLI disponible, pero los siguientes modelos configurados no están disponibles en el catálogo de agy: ${modelosFaltantes.join(", ")}. Modelos disponibles: ${modelosDisponibles.join(", ")}.`,
+            estado: "aviso",
+            detalle: `Antigravity CLI respondió pero el catálogo de modelos está vacío o no se pudo interpretar. Se continúa sin validar modelos (usa --skip-model-check para silenciar).`,
           });
+        } else if (modelosFaltantes.length > 0) {
+          if (opciones.skipModelCheck === true) {
+            chequeos.push({
+              nombre: "herramienta",
+              estado: "aviso",
+              detalle: `Antigravity CLI disponible, pero los siguientes modelos configurados no están en el catálogo (omitido por --skip-model-check): ${modelosFaltantes.join(", ")}.`,
+            });
+          } else {
+            const disponiblesMuestra = modelosDisponibles.slice(0, 20).join(", ");
+            const mas =
+              modelosDisponibles.length > 20
+                ? ` (+${modelosDisponibles.length - 20} más)`
+                : "";
+            chequeos.push({
+              nombre: "herramienta",
+              estado: "error",
+              detalle: `Antigravity CLI disponible, pero los siguientes modelos configurados no están disponibles en el catálogo de agy: ${modelosFaltantes.join(", ")}. Disponibles (${modelosDisponibles.length}): ${disponiblesMuestra}${mas}. Si es un alias o modelo remoto válido, repite con --skip-model-check.`,
+            });
+          }
         } else {
           chequeos.push({
             nombre: "herramienta",
@@ -182,8 +219,7 @@ export async function ejecutarChequeos(
         detalle: `No se encontró el ejecutable de Antigravity (${config.runner?.bin_path ?? "agy"}).`,
       });
     }
-  }
- else if (!opciones.simulado && tipoRunner === "claude-code") {
+  } else if (!opciones.simulado && tipoRunner === "claude-code") {
     const preflight = await verificarPreflightClaudeCode(entorno.ejecutor);
     if (!preflight.ok) {
       chequeos.push({
@@ -198,6 +234,12 @@ export async function ejecutarChequeos(
         detalle: `Herramienta compatible (versión ${preflight.version ?? "desconocida"}).`,
       });
     }
+  } else if (!opciones.simulado && tipoRunner === "opencode") {
+    chequeos.push({
+      nombre: "herramienta",
+      estado: "error",
+      detalle: `Runner "opencode" no soportado en este hito (usa "claude-code" o "antigravity").`,
+    });
   } else {
     chequeos.push({
       nombre: "herramienta",

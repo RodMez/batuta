@@ -29,6 +29,7 @@ export interface ArgsRun {
   repoDir?: string;
   base?: string;
   simulado?: string;
+  skipModelCheck?: boolean;
   debug: boolean;
 }
 
@@ -113,6 +114,7 @@ async function ejecutarRunInterno(
     configPath,
     refBase: args.base,
     simulado: args.simulado !== undefined,
+    skipModelCheck: args.skipModelCheck === true,
   });
   if (!config || chequeos.some((c) => c.estado === "error")) {
     return {

@@ -85,6 +85,7 @@ export function createProgram(
     .option("--config <fichero>", "Configuración (por defecto, batuta.yaml en el repo)")
     .option("--base <ref>", "Referencia de Git de la que parte el worktree (por defecto, HEAD)")
     .option("--simulado <guion>", "Guion JSON de agentes simulados (sin gastar nada)")
+    .option("--skip-model-check", "No bloquear si un modelo no está en el catálogo de agy (solo aviso)")
     .action(async (brief: string | undefined, opciones: Record<string, unknown>, comando: Command) => {
       const globales = comando.optsWithGlobals<{ repo?: string; debug?: boolean }>();
       await actuar(
@@ -97,6 +98,7 @@ export function createProgram(
             repoDir: globales.repo,
             base: opciones["base"] as string | undefined,
             simulado: opciones["simulado"] as string | undefined,
+            skipModelCheck: opciones["skip-model-check"] === true,
             debug: globales.debug === true,
           },
           entorno,
@@ -234,6 +236,7 @@ export function createProgram(
     .option("--config <fichero>", "Configuración (por defecto, batuta.yaml en el repo)")
     .option("--base <ref>", "Referencia base a comprobar (por defecto, HEAD)")
     .option("--simulado <guion>", "Omite la comprobación de la herramienta de agentes")
+    .option("--skip-model-check", "No bloquear si un modelo no está en el catálogo de agy (solo aviso)")
     .action(async (opciones: Record<string, unknown>, comando: Command) => {
       const globales = comando.optsWithGlobals<{ repo?: string; debug?: boolean }>();
       await actuar(
@@ -243,6 +246,7 @@ export function createProgram(
             configPath: opciones["config"] as string | undefined,
             base: opciones["base"] as string | undefined,
             simulado: opciones["simulado"] as string | undefined,
+            skipModelCheck: opciones["skip-model-check"] === true,
             debug: globales.debug === true,
           },
           entorno,

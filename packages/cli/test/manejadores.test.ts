@@ -393,6 +393,19 @@ describe("manejadores de la CLI", () => {
     expect(runnerAgy).toBeInstanceOf(AntigravityRunner);
   });
 
+  it("crearRunner lanza error explícito con ejecutor opencode (B1)", () => {
+    const entorno = entornoReal();
+    const configOpencode = parseBatutaConfigYaml(
+      [
+        "proyecto: .",
+        "ejecutor: opencode",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+    );
+    expect(() => crearRunner(entorno, configOpencode)).toThrow(/no soportado/);
+  });
+
   it("parsearModelosAgy extrae identificadores de modelo ignorando lineas de carga", () => {
     const salidaEjemplo = [
       "Fetching available models...",
@@ -409,6 +422,23 @@ describe("manejadores de la CLI", () => {
       "gemini-3.8-flash-low",
       "claude-sonnet-4-6",
     ]);
+  });
+
+  it("parsearModelosAgy ignora cabeceras, BOM, duplicados y vacíos (M5)", () => {
+    const salida = [
+      "MODEL\tDESCRIPTION",
+      "---",
+      "gemini-3.8-flash-low\tLow",
+      "gemini-3.8-flash-low\tLow duplicado",
+      "",
+      "Fetching available models...",
+      "[2Jgemini-3.8-flash-high\tHigh",
+    ].join("\n");
+    expect(parsearModelosAgy(salida)).toEqual([
+      "gemini-3.8-flash-low",
+      "gemini-3.8-flash-high",
+    ]);
+    expect(parsearModelosAgy("")).toEqual([]);
   });
 
   it("preflight con runner antigravity valida que los modelos configurados existan en agy models", async () => {
@@ -474,6 +504,76 @@ describe("manejadores de la CLI", () => {
     expect(chequeoHerramienta).toBeDefined();
     expect(chequeoHerramienta?.estado).toBe("error");
     expect(chequeoHerramienta?.detalle).toContain("modelo-inexistente-xyz");
+  });
+
+  it("preflight --skip-model-check convierte modelo faltante en aviso", async () => {
+    const { repoDir, limpiar } = await crearRepoDesechable();
+    limpiezas.push(limpiar);
+    const configPath = join(repoDir, "batuta.yaml");
+    await writeFile(
+      configPath,
+      [
+        "proyecto: .",
+        "runner:",
+        "  tipo: antigravity",
+        "alias_modelos:",
+        "  rapido: { modelo: gemini-3.8-flash-low, ventana: 100000 }",
+        "  medio: { modelo: gemini-3.8-flash-medium, ventana: 100000 }",
+        "  fuerte: { modelo: modelo-inexistente-xyz, ventana: 200000 }",
+        "  revisor: { modelo: gemini-3.8-flash-low, ventana: 100000 }",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+      "utf8",
+    );
+    await confirmarTodo(repoDir);
+    const ejecutorMock: EjecutorComandos = {
+      ejecutar: async () => {
+        throw new Error("No debe llamar");
+      },
+      ejecutarArgs: async () => ({
+        codigoSalida: 0,
+        salidaEstandar: "gemini-3.8-flash-low\tLow",
+        salidaError: "",
+        duracionMs: 10,
+        timeoutVencido: false,
+      }),
+    };
+    const entorno = { ...entornoReal(), ejecutor: ejecutorMock };
+    const { chequeos } = await ejecutarChequeos(entorno, {
+      repoDir,
+      configPath,
+      simulado: false,
+      skipModelCheck: true,
+    });
+    const h = chequeos.find((c) => c.nombre === "herramienta");
+    expect(h?.estado).toBe("aviso");
+    expect(h?.detalle).toContain("modelo-inexistente-xyz");
+  });
+
+  it("preflight con runner opencode devuelve error explícito (B1)", async () => {
+    const { repoDir, limpiar } = await crearRepoDesechable();
+    limpiezas.push(limpiar);
+    const configPath = join(repoDir, "batuta.yaml");
+    await writeFile(
+      configPath,
+      [
+        "proyecto: .",
+        "ejecutor: opencode",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+      "utf8",
+    );
+    await confirmarTodo(repoDir);
+    const { chequeos } = await ejecutarChequeos(entornoReal(), {
+      repoDir,
+      configPath,
+      simulado: false,
+    });
+    const h = chequeos.find((c) => c.nombre === "herramienta");
+    expect(h?.estado).toBe("error");
+    expect(h?.detalle).toMatch(/opencode.*no soportado/);
   });
 });
 

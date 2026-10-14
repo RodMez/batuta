@@ -154,7 +154,12 @@ export function crearRunner(
       },
     );
   }
-  return new ClaudeCodeRunner(entorno.ejecutor, config);
+  if (tipo === "claude-code") {
+    return new ClaudeCodeRunner(entorno.ejecutor, config);
+  }
+  throw new Error(
+    `Runner "${tipo}" no soportado en este hito (usa "claude-code" o "antigravity").`,
+  );
 }
 
 export interface DepsEjecucion {
