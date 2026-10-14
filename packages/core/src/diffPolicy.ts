@@ -239,11 +239,10 @@ export function evaluarDiff(
   for (const cambio of cambios) {
     const rutaNorm = normalizarRutaDiff(cambio.ruta);
 
-    // .batuta/contexto/ y archivos internos de Batuta quedan excluidos del diff
+    // .batuta/contexto/ queda excluido del diff (ADR 021, Decisión 6)
     if (
       rutaNorm.startsWith(".batuta/contexto/") ||
-      rutaNorm === ".batuta/contexto" ||
-      rutaNorm.startsWith(".batuta/")
+      rutaNorm === ".batuta/contexto"
     ) {
       continue;
     }
