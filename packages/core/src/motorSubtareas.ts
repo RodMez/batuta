@@ -197,6 +197,27 @@ export async function ejecutarSubtarea(
     }
 
     if (!resultado.exito || !resultado.output) {
+      if (resultado.motivoFallo === "cuota_agotada") {
+        const resetTime = resultado.resetTime ?? null;
+        const bucketIds = resultado.bucketsBajoUmbral ?? [];
+        progreso.pausaCuota = { resetTime, bucketIds, modelo: decision.modelo };
+        await guardarProgreso(deps.fs, dirBatuta, runId, progreso);
+        await deps.store.agregar(runId, {
+          tipo: "ejecucion_pausada_por_cuota",
+          payload: {
+            reset_time: resetTime,
+            buckets_bajo_umbral: bucketIds,
+            modelo: decision.modelo,
+            retomar_en: "IMPLEMENT",
+          },
+        });
+        return {
+          resultado: "pausa-cuota",
+          runId,
+          resetTime,
+          bucketIds,
+        };
+      }
       const fallo: FalloEvaluacion = {
         tipo: "agente",
         motivo: resultado.motivoFallo ?? "error_proceso",

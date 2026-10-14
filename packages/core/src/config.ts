@@ -102,7 +102,37 @@ export const NotificacionesSchema = z.strictObject({
   eventos: z.array(z.enum(EVENTO_AVISO_VALUES)).min(1),
 });
 
-export const EJECUTOR_VALUES = ["claude-code", "opencode"] as const;
+export const EJECUTOR_VALUES = [
+  "claude-code",
+  "opencode",
+  "antigravity",
+] as const;
+
+export const RUNNER_TIPOS = [
+  "antigravity",
+  "claude-code",
+  "opencode",
+] as const;
+
+export const RunnerTipoSchema = z.enum(RUNNER_TIPOS);
+
+export const RunnerConfigSchema = z.strictObject({
+  tipo: RunnerTipoSchema.default("antigravity"),
+  bin_path: z.string().min(1).default("agy"),
+  timeout_seg: z.number().positive().default(300),
+  umbral_cuota: z.number().min(0).max(1).default(0.05),
+  sandbox: z.literal(true).default(true),
+});
+
+export type RunnerConfig = z.infer<typeof RunnerConfigSchema>;
+
+const DEFAULT_RUNNER: RunnerConfig = {
+  tipo: "antigravity",
+  bin_path: "agy",
+  timeout_seg: 300,
+  umbral_cuota: 0.05,
+  sandbox: true,
+};
 
 const DEFAULT_ALIAS_MODELOS: Record<
   string,
@@ -211,6 +241,7 @@ export const BatutaConfigSchema = z
     preparacion: z.array(z.string().min(1)).default([]),
     entorno_gates: z.record(z.string(), z.string()).default({}),
     ejecutor: z.enum(EJECUTOR_VALUES).default("claude-code"),
+    runner: RunnerConfigSchema.default(DEFAULT_RUNNER),
     alias_modelos: z
       .record(z.string(), ModeloPrecioSchema)
       .default(DEFAULT_ALIAS_MODELOS),

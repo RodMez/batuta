@@ -6,6 +6,7 @@ import { dirRun, type ResultadoMotor } from "@batuta/core";
 export const CODIGO_TERMINADA = 0;
 export const CODIGO_PAUSA_APROBACION = 10;
 export const CODIGO_PAUSA_ENTRADA = 11;
+export const CODIGO_PAUSA_CUOTA = 12;
 export const CODIGO_FALLIDA = 1;
 export const CODIGO_USO = 2;
 
@@ -46,6 +47,19 @@ export function presentarResultado(
           `Siguiente: batuta answer ${resultado.runId} "<tu respuesta>"`,
         ].join("\n"),
         codigo: CODIGO_PAUSA_ENTRADA,
+      };
+    }
+    case "pausa-cuota": {
+      const resetMsg = resultado.resetTime
+        ? `Reinicio estimado de cuota: ${resultado.resetTime}.`
+        : "Reinicio estimado: consulte 'agy -p /usage'.";
+      return {
+        texto: [
+          `Pausada por cuota en ${resultado.runId}.`,
+          resetMsg,
+          `Siguiente: batuta resume ${resultado.runId}`,
+        ].join("\n"),
+        codigo: CODIGO_PAUSA_CUOTA,
       };
     }
     case "terminada": {

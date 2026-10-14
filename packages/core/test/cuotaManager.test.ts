@@ -5,7 +5,7 @@ import {
   parsearRespuestaUso,
   CuotaManager,
 } from "../src/cuotaManager.js";
-import { EjecutorComandosSimulado } from "../src/commandRunner.js";
+import { EjecutorComandos } from "../src/commandRunner.js";
 
 const FIXTURE_USAGE_REAL = JSON.stringify({
   conversation_id: "",
@@ -135,7 +135,7 @@ describe("Módulo de Cuotas (cuotaManager)", () => {
   });
 
   it("CuotaManager lanza error real si la llamada a /usage falla", async () => {
-    const simulador: any = {
+    const simulador: EjecutorComandos = {
       ejecutarArgs: async () => ({
         codigoSalida: 1,
         salidaEstandar: "",
@@ -160,7 +160,7 @@ describe("Módulo de Cuotas (cuotaManager)", () => {
 
   it("CuotaManager cachea resultados y los invalida cuando se pide forzar fresca", async () => {
     let llamadas = 0;
-    const simulador: any = {
+    const simulador: EjecutorComandos = {
       ejecutarArgs: async () => {
         llamadas++;
         return {
@@ -170,6 +170,9 @@ describe("Módulo de Cuotas (cuotaManager)", () => {
           duracionMs: 10,
           timeoutVencido: false,
         };
+      },
+      ejecutar: async () => {
+        throw new Error("No debe llamar");
       },
     };
 

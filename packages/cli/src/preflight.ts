@@ -105,7 +105,34 @@ export async function ejecutarChequeos(
     return { chequeos };
   }
 
-  if (!opciones.simulado && config.ejecutor === "claude-code") {
+  const tipoRunner = config.runner?.tipo ?? config.ejecutor;
+  if (!opciones.simulado && tipoRunner === "antigravity") {
+    try {
+      const binPath = config.runner?.bin_path ?? "agy";
+      const res = await entorno.ejecutor.ejecutarArgs(binPath, ["models"], {
+        timeoutMs: 15_000,
+      });
+      if (res.codigoSalida === 0) {
+        chequeos.push({
+          nombre: "herramienta",
+          estado: "correcto",
+          detalle: `Antigravity CLI (${binPath}) disponible y autenticado.`,
+        });
+      } else {
+        chequeos.push({
+          nombre: "herramienta",
+          estado: "error",
+          detalle: `Antigravity CLI no respondió a 'models' (código ${res.codigoSalida}).`,
+        });
+      }
+    } catch {
+      chequeos.push({
+        nombre: "herramienta",
+        estado: "error",
+        detalle: `No se encontró el ejecutable de Antigravity (${config.runner?.bin_path ?? "agy"}).`,
+      });
+    }
+  } else if (!opciones.simulado && tipoRunner === "claude-code") {
     const preflight = await verificarPreflightClaudeCode(entorno.ejecutor);
     if (!preflight.ok) {
       chequeos.push({

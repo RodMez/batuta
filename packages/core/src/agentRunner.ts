@@ -84,6 +84,8 @@ export interface AgentRunResult {
   duracionMs: number;
   rutaLog: string;
   reintentos: number;
+  resetTime?: string | null;
+  bucketsBajoUmbral?: string[];
 }
 
 /** Interfaz inyectable común a todo runner de agentes. */

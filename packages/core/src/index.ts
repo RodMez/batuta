@@ -268,3 +268,30 @@ export type {
   PermisosRol,
   UsoAgente,
 } from "./agentRunner.js";
+export {
+  AntigravityRunner,
+  esWorktreeValido,
+  VARIABLES_ENTORNO_AGY,
+} from "./antigravityRunner.js";
+export type {
+  AntigravityRunnerConfig,
+  AntigravityRunnerDeps,
+} from "./antigravityRunner.js";
+export {
+  BucketUsoSchema,
+  CuotaManager,
+  DatosUsoSchema,
+  evaluarCuota,
+  GrupoUsoSchema,
+  obtenerBucketsParaModelo,
+  parsearRespuestaUso,
+  RespuestaUsageAgySchema,
+} from "./cuotaManager.js";
+export type {
+  BucketUso,
+  DatosUso,
+  EvaluacionCuota,
+  GrupoUso,
+  RespuestaUsageAgy,
+} from "./cuotaManager.js";
+

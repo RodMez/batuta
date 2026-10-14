@@ -44,6 +44,13 @@ export function siguientePaso(
       pregunta: progreso.esperaEntrada?.pregunta ?? "",
     };
   }
+  if (estado.estado === "WAITING_QUOTA") {
+    return {
+      paso: "esperar-cuota",
+      resetTime: progreso.pausaCuota?.resetTime,
+      bucketIds: progreso.pausaCuota?.bucketIds,
+    };
+  }
   switch (estado.estado) {
     case "INTAKE": {
       if (puertaNecesaria("H0", config, progreso.aprobaciones)) {
