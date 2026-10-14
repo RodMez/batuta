@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import {
   parseBatutaConfigYaml,
   AntigravityRunner,
@@ -13,8 +14,9 @@ import {
 
 describe("Validación de configuración de ejemplo para Antigravity", () => {
   it("el archivo docs/ejemplos/batuta.antigravity.yaml es válido según BatutaConfigSchema", async () => {
+    const aqui = dirname(fileURLToPath(import.meta.url));
     const contenidoYaml = await readFile(
-      join(process.cwd(), "docs", "ejemplos", "batuta.antigravity.yaml"),
+      resolve(aqui, "..", "..", "..", "docs", "ejemplos", "batuta.antigravity.yaml"),
       "utf8",
     );
     const config = parseBatutaConfigYaml(contenidoYaml);

@@ -1,6 +1,8 @@
 # Configuración de ejemplo de Batuta usando AntigravityRunner (Hito 8 - ADR 021)
 version_esquema: 1
 proyecto: "."
+# Ejecutor efectivo: también puedes omitirlo si defines runner.tipo.
+ejecutor: "antigravity"
 
 runner:
   tipo: "antigravity"
@@ -10,6 +12,7 @@ runner:
   sandbox: true                  # Ejecución segura con flags de sandbox
 
 alias_modelos:
+  # Sin entrada/salida el preflight avisa "Sin precios" y solo controla por tokens.
   gemini-low:
     modelo: "gemini-3.8-flash-low"
     ventana: 1000000
