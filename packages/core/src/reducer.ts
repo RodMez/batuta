@@ -319,12 +319,17 @@ export function applyEvent(estado: RunState, evento: BatutaEvent): RunState {
       if (esTerminal(estado.estado)) {
         throw imposible(evento, estado, "No se puede pausar una ejecución terminal.");
       }
-      PausaCuotaPayloadSchema.parse(evento.payload ?? {});
+      leerPayload(PausaCuotaPayloadSchema, evento);
       return { ...base, estado: "WAITING_QUOTA", puerta_pendiente: null };
     }
     case "ejecucion_reanudada": {
       if (estado.estado === "WAITING_QUOTA") {
         const payload = (evento.payload ?? {}) as Record<string, unknown>;
+        // Solo sale de WAITING_QUOTA con retomar_en explícito (motor.reanudar);
+        // el evento genérico de restaurar()/lock conserva la espera.
+        if (payload.retomar_en === undefined) {
+          return base;
+        }
         const parseRetomar = RunStatusSchema.safeParse(payload.retomar_en);
         const retomarEn =
           parseRetomar.success && !esTerminal(parseRetomar.data)

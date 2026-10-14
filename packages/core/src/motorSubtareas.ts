@@ -252,6 +252,44 @@ export async function ejecutarSubtarea(
 
     // La llamada puede lanzar (interrupción simulada): no cuenta como intento.
     const resultado = await deps.runner.ejecutar(input, contexto);
+    // Pausa por cuota antes de registrar uso: la llamada no se ejecutó (0 tokens),
+    // no debe ensuciar modelos/roles ni emitir advertencia de costos.
+    if (!resultado.exito && resultado.motivoFallo === "cuota_agotada") {
+      const resetTime = resultado.resetTime ?? null;
+      const bucketIds = resultado.bucketsBajoUmbral ?? [];
+      progreso.pausaCuota = { resetTime, bucketIds, modelo: decision.modelo, retomarEn: "IMPLEMENT" };
+      await guardarProgreso(deps.fs, dirBatuta, runId, progreso);
+      await deps.store.agregar(runId, {
+        tipo: "ejecucion_pausada_por_cuota",
+        payload: {
+          reset_time: resetTime,
+          buckets_bajo_umbral: bucketIds,
+          modelo: decision.modelo,
+          retomar_en: "IMPLEMENT",
+        },
+      });
+      await deps.store.agregar(runId, {
+        tipo: "advertencia",
+        paso: subtarea.id,
+        payload: {
+          aviso: "pausa_cuota",
+          modelo: decision.modelo,
+          reset_time: resetTime,
+          buckets_bajo_umbral: bucketIds,
+        },
+      });
+      await deps.notificador.notificar({
+        tipo: "pausa_cuota",
+        runId,
+        mensaje: `Cuota agotada para ${decision.modelo} (${bucketIds.join(", ")}). Reanuda con: batuta resume ${runId}${resetTime ? ` (reset: ${resetTime})` : ""}`,
+      });
+      return {
+        resultado: "pausa-cuota",
+        runId,
+        resetTime,
+        bucketIds,
+      };
+    }
     const tokens = resultado.uso.tokensEntrada + resultado.uso.tokensSalida;
     const precios = config.alias_modelos[decision.alias];
     const costo = calcularCostoEstimado(
@@ -293,42 +331,6 @@ export async function ejecutarSubtarea(
     }
 
     if (!resultado.exito || !resultado.output) {
-      if (resultado.motivoFallo === "cuota_agotada") {
-        const resetTime = resultado.resetTime ?? null;
-        const bucketIds = resultado.bucketsBajoUmbral ?? [];
-        progreso.pausaCuota = { resetTime, bucketIds, modelo: decision.modelo, retomarEn: "IMPLEMENT" };
-        await guardarProgreso(deps.fs, dirBatuta, runId, progreso);
-        await deps.store.agregar(runId, {
-          tipo: "ejecucion_pausada_por_cuota",
-          payload: {
-            reset_time: resetTime,
-            buckets_bajo_umbral: bucketIds,
-            modelo: decision.modelo,
-            retomar_en: "IMPLEMENT",
-          },
-        });
-        await deps.store.agregar(runId, {
-          tipo: "advertencia",
-          paso: subtarea.id,
-          payload: {
-            aviso: "pausa_cuota",
-            modelo: decision.modelo,
-            reset_time: resetTime,
-            buckets_bajo_umbral: bucketIds,
-          },
-        });
-        await deps.notificador.notificar({
-          tipo: "pausa_cuota",
-          runId,
-          mensaje: `Cuota agotada para ${decision.modelo} (${bucketIds.join(", ")}). Reanuda con: batuta resume ${runId}${resetTime ? ` (reset: ${resetTime})` : ""}`,
-        });
-        return {
-          resultado: "pausa-cuota",
-          runId,
-          resetTime,
-          bucketIds,
-        };
-      }
       const fallo: FalloEvaluacion = {
         tipo: "agente",
         motivo: resultado.motivoFallo ?? "error_proceso",

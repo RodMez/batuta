@@ -218,6 +218,11 @@ describe("MotorFlujo - Pausa por Cuota y Reanudación (WAITING_QUOTA)", () => {
     expect(tipos).toContain("advertencia");
     expect(tipos).toContain("ejecucion_reanudada");
     expect(notificador.avisos.some((a) => a.tipo === "pausa_cuota")).toBe(true);
+    // Tras reanudar, pausaCuota queda limpio en motor.json y no se ensucia uso.
+    const { leerProgreso } = await import("../src/index.js");
+    const progresoFinal = await leerProgreso(sistemaArchivosNode, dirBatuta, resPausa.runId);
+    expect(progresoFinal.pausaCuota).toBeUndefined();
+    expect(progresoFinal.subtareas[0]?.modelosUsados ?? []).toHaveLength(1);
   }, 30_000);
 
   it("raíz unificada acepta el worktree real por defecto y respeta timeout de runner (G-01, G-02)", async () => {

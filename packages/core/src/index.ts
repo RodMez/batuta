@@ -77,6 +77,7 @@ export {
   AprobacionPayloadSchema,
   EntradaRecibidaPayloadSchema,
   LimitePayloadSchema,
+  PausaCuotaPayloadSchema,
   applyEvent,
   esEstadoTerminal,
   estadoInicial,
@@ -87,6 +88,7 @@ export type {
   AprobacionPayload,
   EntradaRecibidaPayload,
   LimitePayload,
+  PausaCuotaPayload,
 } from "./reducer.js";
 export {
   dirCheckpoints,

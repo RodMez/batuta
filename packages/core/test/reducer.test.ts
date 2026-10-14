@@ -179,6 +179,31 @@ describe("reductor puro (CA-3, CA-4)", () => {
           payload: { buckets_bajo_umbral: "no-es-array" },
         }),
       ),
-    ).toThrow();
+    ).toThrow(/payload inválido/);
+  });
+
+  it("ejecucion_reanudada sin retomar_en conserva WAITING_QUOTA (G-04)", () => {
+    const base = rebuildState([
+      oportunidad(),
+      evento("spec_creada"),
+      evento("plan_creado"),
+      evento("subtarea_iniciada"),
+      evento("ejecucion_pausada_por_cuota", {
+        payload: { reset_time: null, buckets_bajo_umbral: [] },
+      }),
+    ]);
+    expect(base.estado).toBe("WAITING_QUOTA");
+    const trasInfra = applyEvent(
+      base,
+      evento("ejecucion_reanudada", { payload: { eventos_reproducidos: 5 } }),
+    );
+    expect(trasInfra.estado).toBe("WAITING_QUOTA");
+    const trasMotor = applyEvent(
+      base,
+      evento("ejecucion_reanudada", {
+        payload: { retomar_en: "IMPLEMENT", motivo: "reanudacion de cuota" },
+      }),
+    );
+    expect(trasMotor.estado).toBe("IMPLEMENT");
   });
 });
