@@ -299,6 +299,21 @@ export async function ejecutarSubtarea(
             retomar_en: "IMPLEMENT",
           },
         });
+        await deps.store.agregar(runId, {
+          tipo: "advertencia",
+          paso: subtarea.id,
+          payload: {
+            aviso: "pausa_cuota",
+            modelo: decision.modelo,
+            reset_time: resetTime,
+            buckets_bajo_umbral: bucketIds,
+          },
+        });
+        await deps.notificador.notificar({
+          tipo: "pausa_cuota",
+          runId,
+          mensaje: `Cuota agotada para ${decision.modelo} (${bucketIds.join(", ")}). Reanuda con: batuta resume ${runId}${resetTime ? ` (reset: ${resetTime})` : ""}`,
+        });
         return {
           resultado: "pausa-cuota",
           runId,

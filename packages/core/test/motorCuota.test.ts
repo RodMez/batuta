@@ -9,14 +9,22 @@ import {
   RunStore,
   parseBatutaConfig,
   sistemaArchivosNode,
-  NotificadorNulo,
   type AgentCallContext,
   type AgentInput,
   type AgentRunResult,
   type AgentRunner,
+  type Aviso,
   type BatutaConfig,
+  type Notificador,
 } from "../src/index.js";
 import { crearRelojFijo } from "./helpers.js";
+
+class NotificadorGrabador implements Notificador {
+  readonly avisos: Aviso[] = [];
+  async notificar(aviso: Aviso): Promise<void> {
+    this.avisos.push(aviso);
+  }
+}
 
 class RunnerGuionado implements AgentRunner {
   readonly llamadas: Array<{ input: AgentInput; contexto: AgentCallContext }> = [];
@@ -164,13 +172,14 @@ describe("MotorFlujo - Pausa por Cuota y Reanudación (WAITING_QUOTA)", () => {
       return resultadoExito();
     });
 
+    const notificador = new NotificadorGrabador();
     const motor = new MotorFlujo({
       runner,
       git,
       ejecutor,
       store,
       reloj,
-      notificador: new NotificadorNulo(),
+      notificador,
       fs: sistemaArchivosNode,
     });
 
@@ -204,6 +213,8 @@ describe("MotorFlujo - Pausa por Cuota y Reanudación (WAITING_QUOTA)", () => {
     const lectura = await store.leer(resPausa.runId);
     const tipos = lectura.eventos.map((e) => e.tipo);
     expect(tipos).toContain("ejecucion_pausada_por_cuota");
+    expect(tipos).toContain("advertencia");
     expect(tipos).toContain("ejecucion_reanudada");
+    expect(notificador.avisos.some((a) => a.tipo === "pausa_cuota")).toBe(true);
   }, 30_000);
 });

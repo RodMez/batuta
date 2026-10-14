@@ -44,7 +44,7 @@ export function obtenerVariablesSesionAgy(
   return ["HOME"];
 }
 
-/** Variables de entorno adicionales permitidas para agy (por defecto en Windows, para compatibilidad). */
+/** @deprecated Constante legada fijada a win32; usa obtenerVariablesSesionAgy(plataforma). */
 export const VARIABLES_ENTORNO_AGY: readonly string[] = obtenerVariablesSesionAgy("win32");
 
 /** Configuración inyectable para AntigravityRunner. */

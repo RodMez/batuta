@@ -7,6 +7,7 @@ import {
   loadBatutaConfig,
   parseBatutaConfig,
   parseBatutaConfigYaml,
+  resolverTipoRunner,
 } from "../src/index.js";
 
 /**
@@ -257,5 +258,10 @@ describe("configuración (CA-1, CA-2, CA-3)", () => {
       ejecutor: "antigravity",
     });
     expect(configEjecutorAgy.ejecutor).toBe("antigravity");
+
+    expect(resolverTipoRunner(configPorDefecto)).toBe("claude-code");
+    expect(resolverTipoRunner(configClaude)).toBe("claude-code");
+    expect(resolverTipoRunner(configAgy)).toBe("antigravity");
+    expect(resolverTipoRunner(configEjecutorAgy)).toBe("antigravity");
   });
 });

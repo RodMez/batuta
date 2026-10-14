@@ -94,6 +94,8 @@ export const EVENTO_AVISO_VALUES = [
   "fallo",
   "ejecucion_terminada",
   "costo_cerca_del_limite",
+  "pausa_cuota",
+  "config_invalida",
 ] as const;
 
 /** Notificaciones por Telegram (secciones 7 y 15). */
@@ -127,6 +129,7 @@ export const RunnerConfigSchema = z.strictObject({
 
 export type RunnerConfig = z.infer<typeof RunnerConfigSchema>;
 
+/** @deprecated Ya no se usa como default (runner es optional); se conserva por compatibilidad de imports. */
 export const DEFAULT_RUNNER: RunnerConfig = {
   tipo: "antigravity",
   bin_path: "agy",
@@ -215,6 +218,8 @@ const DEFAULT_NOTIFICACIONES: {
     | "fallo"
     | "ejecucion_terminada"
     | "costo_cerca_del_limite"
+    | "pausa_cuota"
+    | "config_invalida"
   )[];
 } = {
   canal: "telegram",
@@ -224,6 +229,8 @@ const DEFAULT_NOTIFICACIONES: {
     "fallo",
     "ejecucion_terminada",
     "costo_cerca_del_limite",
+    "pausa_cuota",
+    "config_invalida",
   ],
 };
 

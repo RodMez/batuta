@@ -4,7 +4,9 @@ export type TipoAviso =
   | "espera_de_respuesta"
   | "fallo"
   | "ejecucion_terminada"
-  | "costo_cerca_del_limite";
+  | "costo_cerca_del_limite"
+  | "pausa_cuota"
+  | "config_invalida";
 
 /** Aviso emitido por el motor en pausas, fallos y final (hito 6). */
 export interface Aviso {
