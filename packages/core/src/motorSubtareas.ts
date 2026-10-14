@@ -152,6 +152,9 @@ export async function ejecutarSubtarea(
           reglasRepo,
           ultimoInforme,
           ultimaRespuesta: sub.ultimaRespuesta,
+          continuacionResumen: continuacionResumen
+            ? `${continuacionResumen.resumen}\n${continuacionResumen.notas}`
+            : undefined,
         },
       );
       // Limpiar archivos obsoletos del intento anterior si esta vez no tocan.

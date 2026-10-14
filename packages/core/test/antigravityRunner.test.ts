@@ -222,6 +222,44 @@ describe("AntigravityRunner (Hito 8 - ADR 021)", () => {
     }
   });
 
+  it("continuacionResumen se escribe en feedback.md y prompt advierte sandbox (A-02)", async () => {
+    const dirBase = await mkdtemp(join(tmpdir(), "batuta-test-cont-"));
+    try {
+      const res = await escribirContextoEnWorktree(
+        sistemaArchivosNode,
+        dirBase,
+        {
+          spec: "spec",
+          plan: {},
+          subtarea: {
+            id: "sub-1",
+            titulo: "T",
+            complejidad: "baja",
+            archivos: [],
+            criterios: [],
+          },
+          continuacionResumen: "resumen previo\nnotas previas",
+        },
+      );
+      expect(res.feedbackRutaRel).toBe(".batuta/contexto/feedback.md");
+      const prompt = construirPromptCortoAgy(
+        "software-engineer",
+        {
+          id: "sub-1",
+          titulo: "T",
+          complejidad: "baja",
+          archivos: [],
+          criterios: [],
+        },
+        { specRel: res.specRutaRel, planRel: res.planRutaRel },
+      );
+      expect(prompt).toContain("Restriccion de sandbox:");
+      expect(prompt.length).toBeLessThan(500);
+    } finally {
+      await rm(dirBase, { recursive: true, force: true });
+    }
+  });
+
   it("construirPromptCortoAgy trunca archivos y títulos largos por debajo de 4000 (M3)", () => {
     const muchos = Array.from({ length: 100 }, (_, i) => `src/archivo-${i}.ts`);
     const prompt = construirPromptCortoAgy(
@@ -237,7 +275,7 @@ describe("AntigravityRunner (Hito 8 - ADR 021)", () => {
     );
     expect(prompt.length).toBeLessThan(4000);
     expect(prompt).toContain("(+80 más)");
-    expect(prompt).toContain('localiza la subtarea con id "sub-x"');
+    expect(prompt).toContain('(ver subtarea "sub-x")');
     expect(prompt).not.toContain("\ncon salto");
   });
 

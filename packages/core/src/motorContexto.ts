@@ -9,6 +9,7 @@ export interface ContextoArchivosWorktree {
   reglasRepo?: string;
   ultimoInforme?: string;
   ultimaRespuesta?: string;
+  continuacionResumen?: string;
 }
 
 export interface ResultadoContextoArchivos {
@@ -49,6 +50,11 @@ export async function escribirContextoEnWorktree(
   if (datos.ultimaRespuesta && datos.ultimaRespuesta.trim().length > 0) {
     bloquesFeedback.push(
       `## Respuesta a pregunta bloqueante\n${datos.ultimaRespuesta}`,
+    );
+  }
+  if (datos.continuacionResumen && datos.continuacionResumen.trim().length > 0) {
+    bloquesFeedback.push(
+      `## Notas de continuacion del turno previo\n${datos.continuacionResumen}`,
     );
   }
   if (bloquesFeedback.length > 0) {

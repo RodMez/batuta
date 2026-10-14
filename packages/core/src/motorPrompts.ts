@@ -65,13 +65,14 @@ export function construirPromptCortoAgy(
     (restantes > 0 ? ` …(+${restantes} más)` : "");
   const lineas = [
     `Rol: ${rol}. Tarea: ${subtarea.id} - ${tituloUnaLinea}.`,
-    `Archivos permitidos para editar: ${archivos}.`,
-    `Requisitos y contexto del proyecto:`,
-    `- Especificación: "${rutas.specRel}"`,
-    `- Plan: "${rutas.planRel}" (localiza la subtarea con id "${subtarea.id}" para ver descripción y criterios)`,
-    rutas.feedbackRel ? `- Feedback previo: "${rutas.feedbackRel}"` : "",
-    rutas.reglasRepoRel ? `- Reglas del repositorio: "${rutas.reglasRepoRel}"` : "",
-    `Instrucción: Implementa los cambios requeridos únicamente en los archivos permitidos y devuelve tu respuesta estructurada según el esquema solicitado.`,
+    `Permitidos: ${archivos}.`,
+    `Contexto:`,
+    `- Spec: "${rutas.specRel}"`,
+    `- Plan: "${rutas.planRel}" (ver subtarea "${subtarea.id}")`,
+    rutas.feedbackRel ? `- Feedback: "${rutas.feedbackRel}"` : "",
+    rutas.reglasRepoRel ? `- Reglas: "${rutas.reglasRepoRel}"` : "",
+    `Restriccion de sandbox: No ejecutes comandos de terminal ni pruebas por tu cuenta (la terminal esta deshabilitada en sandbox; el motor ejecutara los gates).`,
+    `Instrucción: Solo toca permitidos y responde según esquema.`,
   ].filter(Boolean);
 
   return lineas.join("\n");
