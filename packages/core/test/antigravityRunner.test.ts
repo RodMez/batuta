@@ -80,6 +80,10 @@ describe("AntigravityRunner (Hito 8 - ADR 021)", () => {
     expect(esWorktreeValido("/repo/.batuta/worktrees/../afuera")).toBe(false);
     // Raíz vacía se trata como no especificada (canónico).
     expect(esWorktreeValido("/repo/.batuta/worktrees/run-1", "")).toBe(true);
+    // Windows insensible a mayúsculas (solo aplica en win32).
+    if (process.platform === "win32") {
+      expect(esWorktreeValido("C:\\REPO\\.BATUTA\\WORKTREES\\run-1")).toBe(true);
+    }
   });
 
   it("sanitizarTaskIdParaArchivo confina nombres de log (H-A1)", () => {

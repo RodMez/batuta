@@ -130,7 +130,8 @@ export function esWorktreeValido(
   // Validación canónica por defecto: debe ser un subdirectorio hijo de .batuta/worktrees/
   const norm = normalizarRutaPosix(rutaTrabajoResuelta);
   const marcador = "/.batuta/worktrees/";
-  const idx = norm.lastIndexOf(marcador);
+  const normBusqueda = process.platform === "win32" ? norm.toLowerCase() : norm;
+  const idx = normBusqueda.lastIndexOf(marcador);
   if (idx === -1) {
     return false;
   }

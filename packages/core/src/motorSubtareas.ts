@@ -291,7 +291,7 @@ export async function ejecutarSubtarea(
       if (resultado.motivoFallo === "cuota_agotada") {
         const resetTime = resultado.resetTime ?? null;
         const bucketIds = resultado.bucketsBajoUmbral ?? [];
-        progreso.pausaCuota = { resetTime, bucketIds, modelo: decision.modelo };
+        progreso.pausaCuota = { resetTime, bucketIds, modelo: decision.modelo, retomarEn: "IMPLEMENT" };
         await guardarProgreso(deps.fs, dirBatuta, runId, progreso);
         await deps.store.agregar(runId, {
           tipo: "ejecucion_pausada_por_cuota",

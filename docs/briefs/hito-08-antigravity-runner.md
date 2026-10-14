@@ -130,14 +130,14 @@ Pendientes menores: probar si el sandbox se comporta igual con rutas absolutas y
 
 ## 9. Criterios de aceptación
 
-- [ ] `npm run verify` en verde (lint, typecheck, tests, build) en Windows y en el CI de Ubuntu.
-- [ ] Ninguna llamada a `exec` con cadenas interpoladas; todo `spawn` con arreglo y `shell: false`.
-- [ ] `--dangerously-skip-permissions` no aparece en el código salvo en tests que verifican su ausencia.
-- [ ] El runner devuelve datos solo de `structured_output` validado por Zod.
-- [ ] `ejecucion_pausada_por_cuota` emitido con `reset_time`; `batuta resume` reanuda correctamente (test con motor y ejecutable falso).
-- [ ] `batuta.yaml` de ejemplo actualizado y validado por el esquema; modelos no hardcodeados.
-- [ ] ADR 021 incorporado en `docs/decisiones/` y consistente con lo implementado (si el código se aparta del ADR, actualizar el ADR).
-- [ ] Documentado el límite de contención de `--sandbox` y el riesgo residual en el ADR y en el README del runner.
+- [ ] `npm run verify` en verde (lint, typecheck, tests, build) en Windows y en el CI de Ubuntu. (Windows verificado 243 passed; Ubuntu pendiente)
+- [x] Ninguna llamada a `exec` con cadenas interpoladas; todo `spawn` con arreglo y `shell: false`.
+- [x] `--dangerously-skip-permissions` no aparece en el código salvo en tests que verifican su ausencia.
+- [x] El runner devuelve datos solo de `structured_output` validado por Zod.
+- [x] `ejecucion_pausada_por_cuota` emitido con `reset_time`; `batuta resume` reanuda correctamente (test con motor y ejecutable falso).
+- [x] `batuta.yaml` de ejemplo actualizado y validado por el esquema; modelos no hardcodeados.
+- [x] ADR 021 incorporado en `docs/decisiones/` y consistente con lo implementado (si el código se aparta del ADR, actualizar el ADR).
+- [x] Documentado el límite de contención de `--sandbox` y el riesgo residual en el ADR y en el README del runner.
 - [ ] Una corrida manual end-to-end documentada (brief → spec → plan → una subtarea → gates) con tokens consumidos por paso.
 
 ## 10. Entrega

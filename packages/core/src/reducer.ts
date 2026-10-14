@@ -319,6 +319,7 @@ export function applyEvent(estado: RunState, evento: BatutaEvent): RunState {
       if (esTerminal(estado.estado)) {
         throw imposible(evento, estado, "No se puede pausar una ejecución terminal.");
       }
+      PausaCuotaPayloadSchema.parse(evento.payload ?? {});
       return { ...base, estado: "WAITING_QUOTA", puerta_pendiente: null };
     }
     case "ejecucion_reanudada": {

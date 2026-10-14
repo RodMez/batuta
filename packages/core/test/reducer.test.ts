@@ -157,4 +157,28 @@ describe("reductor puro (CA-3, CA-4)", () => {
       ),
     ).toThrow(/terminal DONE/);
   });
+
+  it("valida payload de pausa por cuota con Zod (A-04)", () => {
+    const base = rebuildState([
+      oportunidad(),
+      evento("spec_creada"),
+      evento("plan_creado"),
+      evento("subtarea_iniciada"),
+    ]);
+    const pausado = applyEvent(
+      base,
+      evento("ejecucion_pausada_por_cuota", {
+        payload: { reset_time: null, buckets_bajo_umbral: ["3p-5h"] },
+      }),
+    );
+    expect(pausado.estado).toBe("WAITING_QUOTA");
+    expect(() =>
+      applyEvent(
+        base,
+        evento("ejecucion_pausada_por_cuota", {
+          payload: { buckets_bajo_umbral: "no-es-array" },
+        }),
+      ),
+    ).toThrow();
+  });
 });

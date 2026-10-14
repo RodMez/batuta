@@ -384,11 +384,12 @@ export class MotorFlujo {
       });
     }
     if (estado.estado === "WAITING_QUOTA") {
+      const retomarEn = progreso.pausaCuota?.retomarEn ?? "IMPLEMENT";
       progreso.pausaCuota = undefined;
       await guardarProgreso(this.deps.fs, dirBatuta, runId, progreso);
       await this.deps.store.agregar(runId, {
         tipo: "ejecucion_reanudada",
-        payload: { retomar_en: "IMPLEMENT", motivo: "reanudacion de cuota" },
+        payload: { retomar_en: retomarEn, motivo: "reanudacion de cuota" },
       });
     }
     return this.continuarCon(dirBatuta, runId);

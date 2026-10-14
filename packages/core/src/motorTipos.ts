@@ -81,7 +81,7 @@ export interface ProgresoMotor {
   gatesFallidosGlobal: string[];
   motivoFallo?: string;
   esperaEntrada?: { pregunta: string; subtareaId: string };
-  pausaCuota?: { resetTime?: string | null; bucketIds?: string[]; modelo?: string };
+  pausaCuota?: { resetTime?: string | null; bucketIds?: string[]; modelo?: string; retomarEn?: import("./state.js").RunStatus };
   worktree: {
     ruta: string;
     rama: string;
