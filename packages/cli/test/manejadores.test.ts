@@ -506,6 +506,43 @@ describe("manejadores de la CLI", () => {
     expect(chequeoHerramienta?.detalle).toContain("modelo-inexistente-xyz");
   });
 
+  it("preflight antigravity pasa entornoExtra de sesión a agy models (A-03)", async () => {
+    const { repoDir, limpiar } = await crearRepoDesechable();
+    limpiezas.push(limpiar);
+    const configPath = join(repoDir, "batuta.yaml");
+    await writeFile(
+      configPath,
+      [
+        "proyecto: .",
+        "runner:",
+        "  tipo: antigravity",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+      "utf8",
+    );
+    await confirmarTodo(repoDir);
+    let entornoCapturado: Record<string, string> | undefined;
+    const ejecutorMock: EjecutorComandos = {
+      ejecutar: async () => {
+        throw new Error("No debe llamar");
+      },
+      ejecutarArgs: async (_bin, _args, opciones) => {
+        entornoCapturado = opciones?.entornoExtra;
+        return {
+          codigoSalida: 0,
+          salidaEstandar: "gemini-3.8-flash-low\tLow",
+          salidaError: "",
+          duracionMs: 10,
+          timeoutVencido: false,
+        };
+      },
+    };
+    const entorno = { ...entornoReal(), ejecutor: ejecutorMock };
+    await ejecutarChequeos(entorno, { repoDir, configPath, simulado: false });
+    expect(entornoCapturado).toBeDefined();
+  });
+
   it("preflight --skip-model-check convierte modelo faltante en aviso", async () => {
     const { repoDir, limpiar } = await crearRepoDesechable();
     limpiezas.push(limpiar);

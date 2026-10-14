@@ -192,6 +192,38 @@ describe("Módulo de Cuotas (cuotaManager)", () => {
     expect(res.resetTimeMasTardio).toBeNull();
   });
 
+  it("remaining_fraction 0 con umbral 0 es insuficiente (borde A-03)", () => {
+    const bucketsCero = [
+      { id: "3p-5h", remaining_fraction: 0, reset_time: "2026-10-14T05:00:00Z" },
+      { id: "3p-weekly", remaining_fraction: 0.5, reset_time: "2026-10-15T05:00:00Z" },
+    ];
+    const res = evaluarCuota(bucketsCero, "claude-sonnet-4-6", 0);
+    expect(res.suficiente).toBe(false);
+    expect(res.bucketsBajoUmbral.map((b) => b.id)).toContain("3p-5h");
+  });
+
+  it("consultarBuckets pasa entornoExtra de sesión OAuth (A-03)", async () => {
+    let entornoCapturado: Record<string, string> | undefined;
+    const simulador: EjecutorComandos = {
+      ejecutarArgs: async (_bin, _args, opciones) => {
+        entornoCapturado = opciones?.entornoExtra;
+        return {
+          codigoSalida: 0,
+          salidaEstandar: FIXTURE_USAGE_REAL,
+          salidaError: "",
+          duracionMs: 10,
+          timeoutVencido: false,
+        };
+      },
+      ejecutar: async () => {
+        throw new Error("No debe llamar");
+      },
+    };
+    const manager = new CuotaManager({ ejecutor: simulador });
+    await manager.consultarBuckets(true);
+    expect(entornoCapturado).toBeDefined();
+  });
+
   it("CuotaManager lanza error real si la llamada a /usage falla", async () => {
     const simulador: EjecutorComandos = {
       ejecutarArgs: async () => ({

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { construirEntornoSesionAgy } from "./antigravityRunner.js";
 import { EjecutorComandos, EjecutorComandosReal } from "./commandRunner.js";
 import { formatZodError } from "./validation.js";
 
@@ -126,7 +127,7 @@ export function evaluarCuota(
     const bucket = mapaBuckets.get(id);
     if (bucket) {
       evaluados.push(bucket);
-      if (bucket.remaining_fraction < umbralCuota) {
+      if (bucket.remaining_fraction <= 0 || bucket.remaining_fraction < umbralCuota) {
         bajoUmbral.push(bucket);
       }
     }
@@ -186,6 +187,7 @@ export function evaluarCuota(
 export class CuotaManager {
   private ejecutor: EjecutorComandos;
   private binPath: string;
+  private plataforma: NodeJS.Platform;
   private cacheBuckets: { buckets: BucketUso[]; timestamp: number } | null = null;
   private cacheTtlMs: number;
 
@@ -193,9 +195,11 @@ export class CuotaManager {
     ejecutor?: EjecutorComandos;
     binPath?: string;
     cacheTtlMs?: number;
+    plataforma?: NodeJS.Platform;
   }) {
     this.ejecutor = opciones?.ejecutor ?? new EjecutorComandosReal();
     this.binPath = opciones?.binPath ?? "agy";
+    this.plataforma = opciones?.plataforma ?? process.platform;
     this.cacheTtlMs = opciones?.cacheTtlMs ?? 30_000; // 30 segundos de caché por defecto
   }
 
@@ -223,6 +227,7 @@ export class CuotaManager {
       ["-p", "/usage", "--output-format", "json"],
       {
         timeoutMs: 30_000,
+        entornoExtra: construirEntornoSesionAgy(this.plataforma),
       },
     );
 

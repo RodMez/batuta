@@ -1,4 +1,5 @@
 import {
+  construirEntornoSesionAgy,
   resolverTipoRunner,
   verificarPreflightClaudeCode,
   type BatutaConfig,
@@ -148,6 +149,7 @@ export async function ejecutarChequeos(
       const binPath = config.runner?.bin_path ?? "agy";
       const res = await entorno.ejecutor.ejecutarArgs(binPath, ["models"], {
         timeoutMs: 15_000,
+        entornoExtra: construirEntornoSesionAgy(),
       });
       if (res.codigoSalida === 0) {
         const modelosDisponibles = parsearModelosAgy(res.salidaEstandar);

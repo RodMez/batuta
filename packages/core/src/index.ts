@@ -281,6 +281,7 @@ export type {
 } from "./agentRunner.js";
 export {
   AntigravityRunner,
+  construirEntornoSesionAgy,
   esWorktreeValido,
   LIMITE_LONGITUD_PROMPT_AGY,
   obtenerVariablesSesionAgy,

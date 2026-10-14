@@ -47,6 +47,24 @@ export function obtenerVariablesSesionAgy(
 /** @deprecated Constante legada fijada a win32; usa obtenerVariablesSesionAgy(plataforma). */
 export const VARIABLES_ENTORNO_AGY: readonly string[] = obtenerVariablesSesionAgy("win32");
 
+/**
+ * Construye el entorno mínimo de sesión OAuth para `agy`
+ * copiando desde envOrigen las variables de obtenerVariablesSesionAgy.
+ */
+export function construirEntornoSesionAgy(
+  plataforma: NodeJS.Platform = process.platform,
+  envOrigen: NodeJS.ProcessEnv = process.env,
+): Record<string, string> {
+  const entorno: Record<string, string> = {};
+  for (const clave of obtenerVariablesSesionAgy(plataforma)) {
+    const valor = envOrigen[clave];
+    if (valor !== undefined) {
+      entorno[clave] = valor;
+    }
+  }
+  return entorno;
+}
+
 /** Configuración inyectable para AntigravityRunner. */
 export interface AntigravityRunnerConfig {
   binPath?: string;
@@ -173,6 +191,7 @@ export class AntigravityRunner implements AgentRunner {
       new CuotaManager({
         ejecutor: this.ejecutor,
         binPath: this.binPath,
+        plataforma: this.plataforma,
       });
   }
 
@@ -297,13 +316,9 @@ export class AntigravityRunner implements AgentRunner {
         ];
 
         // Construir entorno con variables limpias + variables OAuth de agy según plataforma
-        const entornoExtra: Record<string, string> = {};
-        for (const clave of obtenerVariablesSesionAgy(this.plataforma)) {
-          const valor = process.env[clave];
-          if (valor !== undefined) {
-            entornoExtra[clave] = valor;
-          }
-        }
+        const entornoExtra: Record<string, string> = construirEntornoSesionAgy(
+          this.plataforma,
+        );
 
         // Si el contexto suministró variables extra, inyectarlas con allowlist
         // para no permitir sobrescribir PATH ni variables de sesión (M-5).
