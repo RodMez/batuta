@@ -73,6 +73,7 @@ export interface AntigravityRunnerConfig {
   validarRutaWorktree?: boolean;
   raizWorktrees?: string;
   plataforma?: NodeJS.Platform;
+  preciosModelos?: Record<string, { entrada?: number; salida?: number }>;
 }
 
 /** Dependencias inyectables para pruebas y personalización. */
@@ -172,6 +173,7 @@ export class AntigravityRunner implements AgentRunner {
   private validarWorktree: boolean;
   private raizWorktrees?: string;
   private plataforma: NodeJS.Platform;
+  private preciosModelos?: Record<string, { entrada?: number; salida?: number }>;
   private ejecutor: EjecutorComandos;
   private cuotaManager: CuotaManager;
 
@@ -185,6 +187,7 @@ export class AntigravityRunner implements AgentRunner {
     this.validarWorktree = config?.validarRutaWorktree ?? true;
     this.raizWorktrees = config?.raizWorktrees;
     this.plataforma = config?.plataforma ?? process.platform;
+    this.preciosModelos = config?.preciosModelos;
     this.ejecutor = deps?.ejecutor ?? new EjecutorComandosReal();
     this.cuotaManager =
       deps?.cuotaManager ??
@@ -574,11 +577,18 @@ export class AntigravityRunner implements AgentRunner {
 
   private calcularCosto(
     uso: UsoAgente,
-    _contexto: AgentCallContext,
+    contexto: AgentCallContext,
   ): CostoEstimado {
+    const p = this.preciosModelos?.[contexto.modelo];
+    const precios =
+      p !== undefined &&
+      typeof p.entrada === "number" &&
+      typeof p.salida === "number"
+        ? { entrada: p.entrada, salida: p.salida }
+        : undefined;
     return calcularCostoEstimado(
       { entrada: uso.tokensEntrada, salida: uso.tokensSalida },
-      undefined,
+      precios,
     );
   }
 

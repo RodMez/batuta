@@ -143,11 +143,17 @@ export function crearRunner(
   if (guion) return new RunnerGuionado(guion, desde);
   const tipo = resolverTipoRunner(config);
   if (tipo === "antigravity") {
+    const preciosModelos: Record<string, { entrada?: number; salida?: number }> = {};
+    for (const [alias, info] of Object.entries(config.alias_modelos)) {
+      preciosModelos[alias] = { entrada: info.entrada, salida: info.salida };
+      preciosModelos[info.modelo] = { entrada: info.entrada, salida: info.salida };
+    }
     return new AntigravityRunner(
       {
         binPath: config.runner?.bin_path ?? "agy",
         timeoutMs: (config.runner?.timeout_seg ?? 300) * 1000,
         umbralCuota: config.runner?.umbral_cuota ?? 0.05,
+        preciosModelos,
       },
       {
         ejecutor: entorno.ejecutor,

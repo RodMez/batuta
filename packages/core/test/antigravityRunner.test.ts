@@ -762,5 +762,45 @@ describe("AntigravityRunner (Hito 8 - ADR 021)", () => {
     expect(argsLlamados).toContain("-p");
     expect(argsLlamados).toContain("Mi prompt de prueba");
   });
+
+  it("calcula costo conocido con preciosModelos (A-01)", async () => {
+    const ejecutorMock: EjecutorComandos = {
+      ejecutarArgs: async () => ({
+        codigoSalida: 0,
+        salidaEstandar: JSON.stringify({
+          status: "SUCCESS",
+          structured_output: OUTPUT_VALIDO,
+          usage: { input_tokens: 1_000_000, output_tokens: 500_000 },
+        }),
+        salidaError: "",
+        duracionMs: 50,
+        timeoutVencido: false,
+      }),
+      ejecutar: async () => {
+        throw new Error("No debe llamar");
+      },
+    };
+    const cuotaManagerMock = {
+      verificarCuotaModelo: async () => ({
+        suficiente: true,
+        bucketsBajoUmbral: [],
+        resetTimeMasTardio: null,
+      }),
+    } as unknown as CuotaManager;
+    const runner = new AntigravityRunner(
+      {
+        validarRutaWorktree: false,
+        preciosModelos: { "gemini-3.8-flash-low": { entrada: 1, salida: 2 } },
+      },
+      { ejecutor: ejecutorMock, cuotaManager: cuotaManagerMock },
+    );
+    const res = await runner.ejecutar(INPUT_TEST, {
+      ...CONTEXTO_TEST,
+      modelo: "gemini-3.8-flash-low",
+    });
+    expect(res.exito).toBe(true);
+    expect(res.costoEstimado.desconocido).toBe(false);
+    expect(res.costoEstimado.montoUsd).toBeGreaterThan(0);
+  });
 });
 
