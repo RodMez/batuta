@@ -4,6 +4,7 @@ import type { AgentInput } from "./agentContract.js";
 import type { AgentCallContext } from "./agentRunner.js";
 import { calcularCostoEstimado } from "./agentRunner.js";
 import type { BatutaConfig } from "./config.js";
+import { resolverTipoRunner } from "./config.js";
 import type { CambioArchivo } from "./diffPolicy.js";
 import { evaluarDiff } from "./diffPolicy.js";
 import type { ResultadoGate } from "./gatesRunner.js";
@@ -15,7 +16,8 @@ import {
 } from "./informeFallo.js";
 import { dirInformes, guardarProgreso, leerProgreso, leerReglasRepo, rutaPlan, rutaSpec } from "./motorRutas.js";
 import { comprobarLimites, emitirAdvertenciaCostos, fallarEjecucion, registrarUso } from "./motorLimites.js";
-import { construirPrompt } from "./motorPrompts.js";
+import { construirPrompt, construirPromptCortoAgy } from "./motorPrompts.js";
+import { escribirContextoEnWorktree } from "./motorContexto.js";
 import type {
   DependenciasMotor,
   ProgresoMotor,
@@ -105,17 +107,49 @@ export async function ejecutarSubtarea(
       intento: rol === "software-engineer" ? intentoNumero : 1,
       config,
     });
+    const worktreeRuta = progreso.worktree?.ruta;
+    if (!worktreeRuta) {
+      throw new Error(`Sin worktree para ${runId}`);
+    }
+
     const ultimoInforme =
       sub.informes.length > 0 ? sub.informes[sub.informes.length - 1]! : "";
-    const prompt = await construirPrompt(
-      rol,
-      subtarea,
-      spec,
-      reglasRepo,
-      ultimoInforme,
-      sub.ultimaRespuesta,
-      continuacionResumen ?? undefined,
+
+    // Escribir contexto en .batuta/contexto/ dentro del worktree (ADR 021, Decisión 6)
+    const contextoArchivos = await escribirContextoEnWorktree(
+      deps.fs,
+      worktreeRuta,
+      {
+        spec,
+        plan,
+        subtarea,
+        reglasRepo,
+        ultimoInforme,
+        ultimaRespuesta: sub.ultimaRespuesta,
+      },
     );
+
+    const tipoRunner = resolverTipoRunner(config);
+    let prompt: string;
+    if (tipoRunner === "antigravity") {
+      prompt = construirPromptCortoAgy(rol, subtarea, {
+        specRel: contextoArchivos.specRutaRel,
+        planRel: contextoArchivos.planRutaRel,
+        feedbackRel: contextoArchivos.feedbackRutaRel,
+        reglasRepoRel: contextoArchivos.reglasRepoRutaRel,
+      });
+    } else {
+      prompt = await construirPrompt(
+        rol,
+        subtarea,
+        spec,
+        reglasRepo,
+        ultimoInforme,
+        sub.ultimaRespuesta,
+        continuacionResumen ?? undefined,
+      );
+    }
+
     const input: AgentInput = {
       task_id: subtarea.id,
       agent_role: rol,
@@ -124,10 +158,9 @@ export async function ejecutarSubtarea(
       budget_limit_usd: config.limites.usd_por_agente,
       max_steps: config.limites.pasos_por_agente,
     };
-    const worktreeRuta = progreso.worktree?.ruta;
-    if (!worktreeRuta) {
-      throw new Error(`Sin worktree para ${runId}`);
-    }
+
+    const raizWorktrees =
+      config.directorio_worktrees ?? join(dirBatuta, "worktrees");
     const contexto: AgentCallContext = {
       directorioTrabajo: worktreeRuta,
       rol,
@@ -143,6 +176,7 @@ export async function ejecutarSubtarea(
       prompt,
       runId,
       directorioLogs: join(dirRun(dirBatuta, runId), "logs"),
+      raizWorktrees,
     };
 
     if (estado.estado !== "IMPLEMENT") {

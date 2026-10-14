@@ -134,6 +134,41 @@ describe("Módulo de Cuotas (cuotaManager)", () => {
     expect(res.resetTimeMasTardio).toBe("2026-10-15T12:00:00Z");
   });
 
+  it("compara reset_time cronológicamente según Date.parse y no como texto alfabético", () => {
+    // 10:30:00+02:00 es en realidad 08:30:00Z (más temprano que 09:00:00Z)
+    // Una comparación alfabética errónea devolvería 10:30:00+02:00
+    const bucketsConZonas = [
+      {
+        id: "3p-5h",
+        remaining_fraction: 0.01,
+        reset_time: "2026-10-14T09:00:00Z",
+      },
+      {
+        id: "3p-weekly",
+        remaining_fraction: 0.01,
+        reset_time: "2026-10-14T10:30:00+02:00",
+      },
+    ];
+
+    const res = evaluarCuota(bucketsConZonas, "claude-sonnet-4-6", 0.05);
+    expect(res.suficiente).toBe(false);
+    expect(res.resetTimeMasTardio).toBe("2026-10-14T09:00:00Z");
+  });
+
+  it("falla si /usage no contiene ninguno de los buckets esperados para el modelo", () => {
+    const bucketsAjenos = [
+      {
+        id: "bucket-desconocido",
+        remaining_fraction: 1.0,
+        reset_time: "2026-10-14T05:00:00Z",
+      },
+    ];
+
+    expect(() =>
+      evaluarCuota(bucketsAjenos, "gemini-3.8-flash-low", 0.05),
+    ).toThrow(/No se encontró ninguno de los buckets de cuota requeridos/);
+  });
+
   it("CuotaManager lanza error real si la llamada a /usage falla", async () => {
     const simulador: EjecutorComandos = {
       ejecutarArgs: async () => ({

@@ -115,6 +115,7 @@ export const RUNNER_TIPOS = [
 ] as const;
 
 export const RunnerTipoSchema = z.enum(RUNNER_TIPOS);
+export type RunnerTipo = z.infer<typeof RunnerTipoSchema>;
 
 export const RunnerConfigSchema = z.strictObject({
   tipo: RunnerTipoSchema.default("antigravity"),
@@ -126,7 +127,7 @@ export const RunnerConfigSchema = z.strictObject({
 
 export type RunnerConfig = z.infer<typeof RunnerConfigSchema>;
 
-const DEFAULT_RUNNER: RunnerConfig = {
+export const DEFAULT_RUNNER: RunnerConfig = {
   tipo: "antigravity",
   bin_path: "agy",
   timeout_seg: 300,
@@ -241,7 +242,7 @@ export const BatutaConfigSchema = z
     preparacion: z.array(z.string().min(1)).default([]),
     entorno_gates: z.record(z.string(), z.string()).default({}),
     ejecutor: z.enum(EJECUTOR_VALUES).default("claude-code"),
-    runner: RunnerConfigSchema.default(DEFAULT_RUNNER),
+    runner: RunnerConfigSchema.optional(),
     alias_modelos: z
       .record(z.string(), ModeloPrecioSchema)
       .default(DEFAULT_ALIAS_MODELOS),
@@ -346,4 +347,18 @@ export function parseBatutaConfigYaml(yamlText: string): BatutaConfig {
 export async function loadBatutaConfig(filePath: string): Promise<BatutaConfig> {
   const text = await readFile(filePath, "utf8");
   return parseBatutaConfigYaml(text);
+}
+
+/**
+ * Resuelve el tipo de runner efectivo:
+ * Si se definió explícitamente `runner.tipo`, prevalece.
+ * En caso contrario, se deriva de `config.ejecutor` (por defecto "claude-code").
+ */
+export function resolverTipoRunner(
+  config: BatutaConfig,
+): RunnerTipo | (typeof EJECUTOR_VALUES)[number] {
+  if (config.runner?.tipo) {
+    return config.runner.tipo;
+  }
+  return config.ejecutor;
 }

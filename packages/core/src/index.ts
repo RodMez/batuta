@@ -36,6 +36,7 @@ export {
   loadBatutaConfig,
   parseBatutaConfig,
   parseBatutaConfigYaml,
+  resolverTipoRunner,
 } from "./config.js";
 export type { BatutaConfig, Gate } from "./config.js";
 export {
@@ -211,7 +212,17 @@ export type {
   ResultadoMotor,
 } from "./motorTipos.js";
 export { siguientePaso, progresoInicial } from "./motorDecision.js";
-export { construirPrompt, describirSubtarea } from "./motorPrompts.js";
+export {
+  construirPrompt,
+  construirPromptCortoAgy,
+  describirSubtarea,
+} from "./motorPrompts.js";
+export type { RutasContextoAgy } from "./motorPrompts.js";
+export { escribirContextoEnWorktree } from "./motorContexto.js";
+export type {
+  ContextoArchivosWorktree,
+  ResultadoContextoArchivos,
+} from "./motorContexto.js";
 export {
   comprobarLimites,
   emitirAdvertenciaCostos,
@@ -271,6 +282,7 @@ export type {
 export {
   AntigravityRunner,
   esWorktreeValido,
+  LIMITE_LONGITUD_PROMPT_AGY,
   VARIABLES_ENTORNO_AGY,
 } from "./antigravityRunner.js";
 export type {

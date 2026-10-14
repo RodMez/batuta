@@ -132,7 +132,15 @@ export function evaluarCuota(
     }
   }
 
-  // Si no se encontraron los buckets esperados, asumimos que no hay bloqueo de cuota conocido
+  // Si no se encontró ninguno de los buckets esperados, fallar para no perder el control silenciosamente
+  if (evaluados.length === 0) {
+    throw new Error(
+      `No se encontró ninguno de los buckets de cuota requeridos (${idsEsperados.join(
+        ", ",
+      )}) para el modelo "${nombreModelo}" en la salida de /usage. Verifica la versión de agy o la configuración.`,
+    );
+  }
+
   if (bajoUmbral.length === 0) {
     return {
       suficiente: true,
@@ -142,11 +150,18 @@ export function evaluarCuota(
     };
   }
 
-  // Seleccionar el reset_time más tardío (lexicográficamente mayor en ISO 8601)
+  // Seleccionar el reset_time cronológicamente más tardío usando Date.parse (ms epoch)
   let masTardio: string | null = null;
+  let maxEpochMs = -Infinity;
   for (const b of bajoUmbral) {
     if (b.reset_time) {
-      if (masTardio === null || b.reset_time > masTardio) {
+      const epochMs = Date.parse(b.reset_time);
+      if (!Number.isNaN(epochMs)) {
+        if (epochMs > maxEpochMs) {
+          maxEpochMs = epochMs;
+          masTardio = b.reset_time;
+        }
+      } else if (masTardio === null || b.reset_time > masTardio) {
         masTardio = b.reset_time;
       }
     }

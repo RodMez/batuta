@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { mkdtemp, rm } from "node:fs/promises";
 import {
   AntigravityRunner,
   esWorktreeValido,
-} from "../src/antigravityRunner.js";
+  LIMITE_LONGITUD_PROMPT_AGY,
+  construirPromptCortoAgy,
+  escribirContextoEnWorktree,
+  sistemaArchivosNode,
+} from "../src/index.js";
 import { AgentInput, AgentOutput } from "../src/agentContract.js";
 import { AgentCallContext } from "../src/agentRunner.js";
 import { EjecutorComandos } from "../src/commandRunner.js";
@@ -13,7 +18,7 @@ import { CuotaManager } from "../src/cuotaManager.js";
 const INPUT_TEST: AgentInput = {
   task_id: "tarea-1",
   agent_role: "software-engineer",
-  spec_path: "docs/specs/spec.md",
+  spec_path: "spec.md",
   allowed_files: ["src/index.ts"],
   budget_limit_usd: 1.0,
   max_steps: 10,
@@ -39,14 +44,32 @@ const OUTPUT_VALIDO: AgentOutput = {
 };
 
 describe("AntigravityRunner (Hito 8 - ADR 021)", () => {
-  it("valida que el cwd esté confinado dentro de un worktree de Batuta", () => {
+  it("valida estrictamente que el cwd sea un hijo del directorio de worktrees", () => {
+    // 1. Canónico por defecto (.batuta/worktrees/<run_id>)
     expect(esWorktreeValido("/repo/.batuta/worktrees/run-1")).toBe(true);
     expect(esWorktreeValido("C:\\repo\\.batuta\\worktrees\\run-1")).toBe(true);
+
+    // Debe rechazar la carpeta raíz compartida de worktrees
+    expect(esWorktreeValido("/repo/.batuta/worktrees")).toBe(false);
+    expect(esWorktreeValido("/repo/.batuta/worktrees/")).toBe(false);
+    expect(esWorktreeValido("C:\\repo\\.batuta\\worktrees")).toBe(false);
+
+    // Debe rechazar rutas que no estén dentro de worktrees
     expect(esWorktreeValido("/repo")).toBe(false);
     expect(esWorktreeValido("C:\\Users\\admin\\Desktop\\batuta")).toBe(false);
+
+    // 2. Con raíz de worktrees configurada (por ejemplo fuera del repo)
+    const raizCustom = "/var/batuta/worktrees-compartidos";
+    expect(esWorktreeValido("/var/batuta/worktrees-compartidos/run-456", raizCustom)).toBe(true);
+    // La raíz misma se rechaza
+    expect(esWorktreeValido(raizCustom, raizCustom)).toBe(false);
+    // Escapes con .. se rechazan
+    expect(esWorktreeValido("/var/batuta/worktrees-compartidos/../afuera", raizCustom)).toBe(false);
+    // Rutas totalmente ajenas se rechazan
+    expect(esWorktreeValido("/tmp/otro-lado", raizCustom)).toBe(false);
   });
 
-  it("rechaza la ejecución si el directorio de trabajo no es un worktree válido", async () => {
+  it("rechaza la ejecución si el directorio de trabajo no es un worktree válido hijo", async () => {
     const runner = new AntigravityRunner();
     const res = await runner.ejecutar(INPUT_TEST, {
       ...CONTEXTO_TEST,
@@ -56,6 +79,72 @@ describe("AntigravityRunner (Hito 8 - ADR 021)", () => {
     expect(res.exito).toBe(false);
     expect(res.motivoFallo).toBe("error_proceso");
     expect(res.output).toBeNull();
+  });
+
+  it("rechaza la ejecución si el prompt supera el límite de longitud segura en Windows", async () => {
+    const runner = new AntigravityRunner({ validarRutaWorktree: false });
+    const promptGigante = "A".repeat(LIMITE_LONGITUD_PROMPT_AGY + 500);
+
+    const res = await runner.ejecutar(INPUT_TEST, {
+      ...CONTEXTO_TEST,
+      prompt: promptGigante,
+    });
+
+    expect(res.exito).toBe(false);
+    expect(res.motivoFallo).toBe("error_proceso");
+    expect(res.output).toBeNull();
+  });
+
+  it("escribe contexto en .batuta/contexto/ y construye prompt corto para agy", async () => {
+    const dirBase = await mkdtemp(join(tmpdir(), "batuta-test-contexto-"));
+    try {
+      const resultadoContexto = await escribirContextoEnWorktree(
+        sistemaArchivosNode,
+        dirBase,
+        {
+          spec: "# Mi Spec\nObjetivo de la spec",
+          plan: { subtareas: [{ id: "sub-1", titulo: "Tarea 1" }] },
+          subtarea: {
+            id: "sub-1",
+            titulo: "Tarea 1",
+            complejidad: "baja",
+            archivos: ["src/index.ts"],
+            criterios: ["criterio-1"],
+          },
+          ultimoInforme: "Fallo en gate test previo",
+          reglasRepo: "Reglas del repositorio",
+        },
+      );
+
+      expect(resultadoContexto.specRutaRel).toBe(".batuta/contexto/spec.md");
+      expect(resultadoContexto.planRutaRel).toBe(".batuta/contexto/plan.json");
+      expect(resultadoContexto.feedbackRutaRel).toBe(".batuta/contexto/feedback.md");
+
+      const promptCorto = construirPromptCortoAgy(
+        "software-engineer",
+        {
+          id: "sub-1",
+          titulo: "Tarea 1",
+          complejidad: "baja",
+          archivos: ["src/index.ts"],
+          criterios: ["criterio-1"],
+        },
+        {
+          specRel: resultadoContexto.specRutaRel,
+          planRel: resultadoContexto.planRutaRel,
+          feedbackRel: resultadoContexto.feedbackRutaRel,
+        },
+      );
+
+      // El prompt debe ser corto (muy por debajo de 500 caracteres)
+      expect(promptCorto.length).toBeLessThan(500);
+      expect(promptCorto).toContain('.batuta/contexto/spec.md');
+      expect(promptCorto).toContain('.batuta/contexto/plan.json');
+      expect(promptCorto).toContain('.batuta/contexto/feedback.md');
+      expect(promptCorto).toContain('src/index.ts');
+    } finally {
+      await rm(dirBase, { recursive: true, force: true });
+    }
   });
 
   it("ejecuta con éxito cuando structured_output es válido y reporta tokens", async () => {

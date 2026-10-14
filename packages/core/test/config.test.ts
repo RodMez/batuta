@@ -227,4 +227,35 @@ describe("configuración (CA-1, CA-2, CA-3)", () => {
     });
     expect(conTope.limites.usd_por_ejecucion).toBe(4.5);
   });
+
+  it("runner es opcional y resolverTipoRunner respeta la compatibilidad hacia atrás con ejecutor", () => {
+    // Caso 1: Config estándar sin runner explícito -> runner es undefined, tipo es claude-code
+    const configPorDefecto = parseBatutaConfig(baseValida());
+    expect(configPorDefecto.runner).toBeUndefined();
+    expect(configPorDefecto.ejecutor).toBe("claude-code");
+
+    // Caso 2: Config con ejecutor explícito claude-code sin sección runner -> debe mantenerse claude-code
+    const configClaude = parseBatutaConfig({
+      ...baseValida(),
+      ejecutor: "claude-code",
+    });
+    expect(configClaude.runner).toBeUndefined();
+
+    // Caso 3: Config con runner explícito tipo antigravity
+    const configAgy = parseBatutaConfig({
+      ...baseValida(),
+      runner: {
+        tipo: "antigravity",
+        bin_path: "agy",
+      },
+    });
+    expect(configAgy.runner?.tipo).toBe("antigravity");
+
+    // Caso 4: Config con ejecutor antigravity sin runner explícito
+    const configEjecutorAgy = parseBatutaConfig({
+      ...baseValida(),
+      ejecutor: "antigravity",
+    });
+    expect(configEjecutorAgy.ejecutor).toBe("antigravity");
+  });
 });

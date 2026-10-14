@@ -71,6 +71,7 @@ export interface AgentCallContext {
   promptSistema?: string;
   runId?: string;
   directorioLogs?: string;
+  raizWorktrees?: string;
 }
 
 /** Resultado estructurado devuelto por un AgentRunner. */

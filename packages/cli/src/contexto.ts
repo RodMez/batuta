@@ -12,6 +12,7 @@ import {
   parseBatutaConfigYaml,
   parseGuionJson,
   relojSistema,
+  resolverTipoRunner,
   sistemaArchivosNode,
   RunStore,
   type AgentRunner,
@@ -140,7 +141,7 @@ export function crearRunner(
   desde = 0,
 ): AgentRunner {
   if (guion) return new RunnerGuionado(guion, desde);
-  const tipo = config.runner?.tipo ?? config.ejecutor;
+  const tipo = resolverTipoRunner(config);
   if (tipo === "antigravity") {
     return new AntigravityRunner(
       {

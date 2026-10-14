@@ -37,3 +37,35 @@ export async function construirPrompt(
   }
   return prompt;
 }
+
+export interface RutasContextoAgy {
+  specRel: string;
+  planRel: string;
+  feedbackRel?: string;
+  reglasRepoRel?: string;
+}
+
+/**
+ * Construye un prompt corto (<500 caracteres) para agy conforme a la Decisión 6 de ADR 021.
+ * En lugar de incrustar specs gigantes, planes completos y esquemas en el flag -p,
+ * referencia los archivos depositados en .batuta/contexto/ dentro del worktree.
+ */
+export function construirPromptCortoAgy(
+  rol: AgentRole,
+  subtarea: Subtask,
+  rutas: RutasContextoAgy,
+): string {
+  const archivos = subtarea.archivos.join(", ");
+  const lineas = [
+    `Rol: ${rol}. Tarea: ${subtarea.id} - ${subtarea.titulo}.`,
+    `Archivos permitidos para editar: ${archivos}.`,
+    `Requisitos y contexto del proyecto:`,
+    `- Especificación: "${rutas.specRel}"`,
+    `- Plan: "${rutas.planRel}"`,
+    rutas.feedbackRel ? `- Feedback previo: "${rutas.feedbackRel}"` : "",
+    rutas.reglasRepoRel ? `- Reglas del repositorio: "${rutas.reglasRepoRel}"` : "",
+    `Instrucción: Implementa los cambios requeridos únicamente en los archivos permitidos y devuelve tu respuesta estructurada según el esquema solicitado.`,
+  ].filter(Boolean);
+
+  return lineas.join("\n");
+}

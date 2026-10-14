@@ -1,4 +1,5 @@
 import {
+  resolverTipoRunner,
   verificarPreflightClaudeCode,
   type BatutaConfig,
 } from "@batuta/core";
@@ -105,7 +106,7 @@ export async function ejecutarChequeos(
     return { chequeos };
   }
 
-  const tipoRunner = config.runner?.tipo ?? config.ejecutor;
+  const tipoRunner = resolverTipoRunner(config);
   if (!opciones.simulado && tipoRunner === "antigravity") {
     try {
       const binPath = config.runner?.bin_path ?? "agy";

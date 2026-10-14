@@ -1,5 +1,5 @@
 import { mkdir, writeFile, unlink } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, relative, isAbsolute } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import {
@@ -26,6 +26,9 @@ import { CuotaManager, EvaluacionCuota } from "./cuotaManager.js";
 import { ofuscarSecretos } from "./diffPolicy.js";
 import { formatZodError } from "./validation.js";
 
+/** Límite de seguridad de longitud para el prompt pasado por -p (evita límite de ~32k en Windows). */
+export const LIMITE_LONGITUD_PROMPT_AGY = 4000;
+
 /** Variables de entorno adicionales permitidas exclusivamente para agy. */
 export const VARIABLES_ENTORNO_AGY: readonly string[] = [
   "USERPROFILE",
@@ -47,6 +50,7 @@ export interface AntigravityRunnerConfig {
   timeoutMs?: number;
   umbralCuota?: number;
   validarRutaWorktree?: boolean;
+  raizWorktrees?: string;
 }
 
 /** Dependencias inyectables para pruebas y personalización. */
@@ -67,12 +71,37 @@ function normalizarRutaPosix(ruta: string): string {
 }
 
 /**
- * Comprueba si un directorio de trabajo es un worktree válido de Batuta.
- * Rechaza directorios que no estén dentro de .batuta/worktrees/ o que apunten a la raíz.
+ * Comprueba si un directorio de trabajo es un worktree hijo válido de la raíz de worktrees.
+ * - Debe ser un subdirectorio hijo estricto.
+ * - NO puede ser la carpeta raíz de worktrees compartida por todos los runs.
+ * - Si no se especifica raíz, valida contra el patrón canónico hijo de /.batuta/worktrees/<runId>.
  */
-export function esWorktreeValido(directorioTrabajo: string): boolean {
-  const norm = normalizarRutaPosix(resolve(directorioTrabajo));
-  return norm.includes("/.batuta/worktrees/") || norm.endsWith("/.batuta/worktrees");
+export function esWorktreeValido(
+  directorioTrabajo: string,
+  raizWorktreesEsperada?: string,
+): boolean {
+  const rutaTrabajoResuelta = resolve(directorioTrabajo);
+
+  if (raizWorktreesEsperada) {
+    const raizResuelta = resolve(raizWorktreesEsperada);
+    // No puede ser la raíz misma de worktrees
+    if (rutaTrabajoResuelta === raizResuelta) {
+      return false;
+    }
+    const rel = relative(raizResuelta, rutaTrabajoResuelta);
+    // Debe estar dentro de la raíz y no escapar hacia arriba
+    return !rel.startsWith("..") && !isAbsolute(rel) && rel.length > 0;
+  }
+
+  // Validación canónica por defecto: debe ser un subdirectorio hijo de .batuta/worktrees/
+  const norm = normalizarRutaPosix(rutaTrabajoResuelta);
+  const marcador = "/.batuta/worktrees/";
+  const idx = norm.lastIndexOf(marcador);
+  if (idx === -1) {
+    return false;
+  }
+  const hijo = norm.slice(idx + marcador.length).trim();
+  return hijo.length > 0 && !hijo.startsWith("/") && !hijo.includes("..");
 }
 
 /**
@@ -84,6 +113,7 @@ export class AntigravityRunner implements AgentRunner {
   private timeoutMs: number;
   private umbralCuota: number;
   private validarWorktree: boolean;
+  private raizWorktrees?: string;
   private ejecutor: EjecutorComandos;
   private cuotaManager: CuotaManager;
 
@@ -95,6 +125,7 @@ export class AntigravityRunner implements AgentRunner {
     this.timeoutMs = config?.timeoutMs ?? 300_000;
     this.umbralCuota = config?.umbralCuota ?? 0.05;
     this.validarWorktree = config?.validarRutaWorktree ?? true;
+    this.raizWorktrees = config?.raizWorktrees;
     this.ejecutor = deps?.ejecutor ?? new EjecutorComandosReal();
     this.cuotaManager =
       deps?.cuotaManager ??
@@ -114,10 +145,31 @@ export class AntigravityRunner implements AgentRunner {
     const inicio = Date.now();
     const rutaLog = this.obtenerRutaLog(contexto, input.task_id);
 
-    // 1. Validar que el cwd esté confinado dentro de un worktree de Batuta
-    if (this.validarWorktree && !esWorktreeValido(contexto.directorioTrabajo)) {
-      const errorMsg = `Seguridad: El directorio de trabajo "${contexto.directorioTrabajo}" no está dentro de .batuta/worktrees/`;
+    // 1. Validar que el cwd esté confinado dentro de un worktree hijo de Batuta
+    const raizEsperada = contexto.raizWorktrees ?? this.raizWorktrees;
+    if (
+      this.validarWorktree &&
+      !esWorktreeValido(contexto.directorioTrabajo, raizEsperada)
+    ) {
+      const errorMsg = `Seguridad: El directorio de trabajo "${contexto.directorioTrabajo}" no es un worktree válido hijo de "${raizEsperada ?? ".batuta/worktrees/"}"`;
       await this.guardarLog(rutaLog, `[RECHAZO CWD] ${errorMsg}`);
+      return {
+        exito: false,
+        output: null,
+        motivoFallo: "error_proceso",
+        uso: { tokensEntrada: 0, tokensSalida: 0, turnos: 0 },
+        costoEstimado: { montoUsd: null, desconocido: true },
+        modeloEfectivo: contexto.modelo,
+        duracionMs: Date.now() - inicio,
+        rutaLog,
+        reintentos: 0,
+      };
+    }
+
+    // 2. Control de longitud máxima de prompt en Windows para prevenir desbordamientos (~32k)
+    if (contexto.prompt.length > LIMITE_LONGITUD_PROMPT_AGY) {
+      const errorMsg = `El prompt para agy (${contexto.prompt.length} caracteres) supera el límite de seguridad de ${LIMITE_LONGITUD_PROMPT_AGY} caracteres. Usa contexto en archivos (.batuta/contexto/) para evitar desbordar la línea de comandos en Windows.`;
+      await this.guardarLog(rutaLog, `[RECHAZO PROMPT] ${errorMsg}`);
       return {
         exito: false,
         output: null,

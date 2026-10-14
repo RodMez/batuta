@@ -2,7 +2,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  AntigravityRunner,
+  ClaudeCodeRunner,
   EjecutorComandosReal,
+  parseBatutaConfigYaml,
   type EjecutorComandos,
   type ResultadoComando,
 } from "@batuta/core";
@@ -14,7 +17,7 @@ import { ejecutarResume } from "../src/comandos/resume.js";
 import { ejecutarRun } from "../src/comandos/run.js";
 import { asegurarExclusionBatuta } from "../src/comandos/run.js";
 import { ejecutarStatus, StatusJsonSchema } from "../src/comandos/status.js";
-import { entornoReal } from "../src/contexto.js";
+import { crearRunner, entornoReal } from "../src/contexto.js";
 import { CONFIG_DEMO, PLAN_UNA, crearRepoDesechable, guionEscribe } from "./utilidades.js";
 
 const CONFIG_LIBRE = [
@@ -362,4 +365,30 @@ describe("manejadores de la CLI", () => {
     expect(res.codigo).toBe(2);
     expect(res.texto).toMatch(/--spec/);
   }, 60000);
+
+  it("crearRunner preserva compatibilidad hacia atrás instanciando ClaudeCodeRunner si no hay sección runner", () => {
+    const entorno = entornoReal();
+    const configClaude = parseBatutaConfigYaml(
+      [
+        "proyecto: .",
+        "ejecutor: claude-code",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+    );
+    const runnerClaude = crearRunner(entorno, configClaude);
+    expect(runnerClaude).toBeInstanceOf(ClaudeCodeRunner);
+
+    const configAgy = parseBatutaConfigYaml(
+      [
+        "proyecto: .",
+        "runner:",
+        "  tipo: antigravity",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+    );
+    const runnerAgy = crearRunner(entorno, configAgy);
+    expect(runnerAgy).toBeInstanceOf(AntigravityRunner);
+  });
 });
