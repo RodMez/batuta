@@ -112,12 +112,26 @@ async function ejecutarStatusInterno(
       codigo: CODIGO_TERMINADA,
     };
   }
+  let pausaCuota: ProgresoMotor["pausaCuota"] | null = null;
+  try {
+    const textoProgreso = await entorno.fs.leerArchivo(
+      join(dirBatuta, "runs", args.runId, "motor.json"),
+    );
+    pausaCuota = (JSON.parse(textoProgreso) as ProgresoMotor).pausaCuota ?? null;
+  } catch {
+    pausaCuota = null;
+  }
   const lineas = [
     `Ejecución: ${ficha.run_id}`,
     `Estado: ${ficha.estado}`,
   ];
   if (ficha.puerta_pendiente) lineas.push(`Puerta pendiente: ${ficha.puerta_pendiente}`);
   if (ficha.pregunta_pendiente) lineas.push(`Pregunta pendiente: ${ficha.pregunta_pendiente}`);
+  if (ficha.estado === "WAITING_QUOTA" && pausaCuota) {
+    lineas.push(
+      `Cuota en espera: reinicio estimado ${pausaCuota.resetTime ?? "desconocido"}`,
+    );
+  }
   lineas.push(
     `Avance: ${ficha.avance.completadas}/${ficha.avance.total} subtareas`,
     ...ficha.subtareas.map(

@@ -52,7 +52,7 @@ class ComandoBatuta extends Command {
 async function actuar(resultado: Promise<ResultadoCLI>): Promise<void> {
   const res = await resultado;
   if (res.texto.length > 0) {
-    if (res.codigo === 0 || res.codigo === 10 || res.codigo === 11) {
+    if (res.codigo === 0 || res.codigo === 10 || res.codigo === 11 || res.codigo === 12) {
       console.log(res.texto);
     } else {
       console.error(res.texto);

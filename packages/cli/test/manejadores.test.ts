@@ -612,5 +612,29 @@ describe("manejadores de la CLI", () => {
     expect(h?.estado).toBe("error");
     expect(h?.detalle).toMatch(/opencode.*no soportado/);
   });
+
+  it("status muestra reinicio estimado cuando hay pausa por cuota (G-03)", async () => {
+    const { repoDir, limpiar } = await crearRepoDesechable();
+    limpiezas.push(limpiar);
+    const entorno = entornoReal();
+    const dirBatuta = join(repoDir, ".batuta");
+    const { RunStore } = await import("@batuta/core");
+    const { crearRelojFijo } = await import("../../core/test/helpers.js");
+    const store = new RunStore(dirBatuta, entorno.fs, crearRelojFijo("2026-10-14T00:00:00Z"));
+    const runId = await store.iniciarEjecucion();
+    await store.agregar(runId, {
+      tipo: "ejecucion_pausada_por_cuota",
+      payload: { reset_time: "2026-10-15T05:00:00Z", buckets_bajo_umbral: [], retomar_en: "IMPLEMENT" },
+    });
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(dirBatuta, "runs", runId), { recursive: true });
+    await writeFile(
+      join(dirBatuta, "runs", runId, "motor.json"),
+      JSON.stringify({ pausaCuota: { resetTime: "2026-10-15T05:00:00Z", bucketIds: [], modelo: "m" } }),
+      "utf8",
+    );
+    const st = await ejecutarStatus({ runId, repoDir, json: false, debug: false }, entorno);
+    expect(st.texto).toContain("Cuota en espera: reinicio estimado 2026-10-15T05:00:00Z");
+  });
 });
 
