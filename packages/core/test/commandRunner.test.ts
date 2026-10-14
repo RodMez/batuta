@@ -238,11 +238,16 @@ describe("EjecutorComandosReal", () => {
     expect(res.salidaEstandar.trim()).toBe("directo sin shell");
   });
 
-  it("puede ejecutar npm --version en Linux y en Windows pasando shell: true (CA-6)", async () => {
-    const res = await ejecutor.ejecutar("npm --version", { shell: true });
-    expect(res.codigoSalida).toBe(0);
-    expect(res.salidaEstandar.trim()).toMatch(/^\d+\.\d+\.\d+/);
-  });
+  it(
+    "puede ejecutar npm --version en Linux y en Windows pasando shell: true (CA-6)",
+    async () => {
+      const res = await ejecutor.ejecutar("npm --version", { shell: true });
+      expect(res.codigoSalida).toBe(0);
+      expect(res.salidaEstandar.trim()).toMatch(/^\d+\.\d+\.\d+/);
+    },
+    30_000,
+  );
+
 
   it("ejecutarArgs ejecuta por vector de argumentos preservando comillas y caracteres especiales exactamente (Hito 5 Ajuste)", async () => {
     const argumentoEspecial = 'arg con "comillas dobles", \'simples\', \\ y saltos\nde\nlinea';

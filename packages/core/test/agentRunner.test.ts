@@ -570,7 +570,8 @@ describe("ClaudeCodeRunner reintentos y límites (CA-5, CA-6, CA-7, CA-8, CA-9)"
       await rm(res.rutaLog, { force: true });
     }
     await rm(tmpDir, { recursive: true, force: true });
-  });
+  }, 30_000);
+
 
   it("el registro de la llamada oculta patrones de claves y secretos conocidos (CA-9)", async () => {
     const textoConSecretos = [
