@@ -1,5 +1,6 @@
 import { mkdir, writeFile, unlink } from "node:fs/promises";
-import { dirname, join, resolve, relative, isAbsolute } from "node:path";
+import { createHash } from "node:crypto";
+import { dirname, join, resolve, relative, isAbsolute, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import {
@@ -85,15 +86,26 @@ export function esWorktreeValido(
 ): boolean {
   const rutaTrabajoResuelta = resolve(directorioTrabajo);
 
-  if (raizWorktreesEsperada) {
-    const raizResuelta = resolve(raizWorktreesEsperada);
+  const raizCruda =
+    typeof raizWorktreesEsperada === "string" &&
+    raizWorktreesEsperada.trim().length > 0
+      ? raizWorktreesEsperada
+      : undefined;
+  if (raizCruda) {
+    const raizResuelta = resolve(raizCruda);
     // No puede ser la raíz misma de worktrees
-    if (rutaTrabajoResuelta === raizResuelta) {
+    if (esMismaRuta(rutaTrabajoResuelta, raizResuelta)) {
       return false;
     }
     const rel = relative(raizResuelta, rutaTrabajoResuelta);
-    // Debe estar dentro de la raíz y no escapar hacia arriba
-    return !rel.startsWith("..") && !isAbsolute(rel) && rel.length > 0;
+    if (rel.length === 0 || isAbsolute(rel)) {
+      return false;
+    }
+    // Debe estar dentro de la raíz y no escapar hacia arriba (por segmentos, no por prefijo).
+    if (rel === ".." || rel.startsWith(`..${sep}`)) {
+      return false;
+    }
+    return true;
   }
 
   // Validación canónica por defecto: debe ser un subdirectorio hijo de .batuta/worktrees/
@@ -104,7 +116,31 @@ export function esWorktreeValido(
     return false;
   }
   const hijo = norm.slice(idx + marcador.length).trim();
-  return hijo.length > 0 && !hijo.startsWith("/") && !hijo.includes("..");
+  if (hijo.length === 0 || hijo.startsWith("/")) {
+    return false;
+  }
+  // Rechazar escapes por segmento ".." (pero permitir nombres como "..." o "..foo").
+  if (hijo.split("/").includes("..")) {
+    return false;
+  }
+  return true;
+}
+
+function esMismaRuta(a: string, b: string): boolean {
+  if (a === b) return true;
+  // Windows: sistema de archivos insensible a mayúsculas.
+  if (process.platform === "win32") {
+    return a.toLowerCase() === b.toLowerCase();
+  }
+  return false;
+}
+
+/** Sanitiza un task_id para uso seguro en nombres de archivo (H-A1). */
+export function sanitizarTaskIdParaArchivo(taskId: string): string {
+  if (/^[A-Za-z0-9_-]{1,64}$/.test(taskId)) {
+    return taskId;
+  }
+  return createHash("sha256").update(taskId, "utf8").digest("hex").slice(0, 16);
 }
 
 /**

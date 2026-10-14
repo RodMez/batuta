@@ -284,6 +284,7 @@ export {
   esWorktreeValido,
   LIMITE_LONGITUD_PROMPT_AGY,
   obtenerVariablesSesionAgy,
+  sanitizarTaskIdParaArchivo,
   VARIABLES_ENTORNO_AGY,
 } from "./antigravityRunner.js";
 export type {

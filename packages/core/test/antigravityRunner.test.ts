@@ -7,6 +7,7 @@ import {
   esWorktreeValido,
   LIMITE_LONGITUD_PROMPT_AGY,
   obtenerVariablesSesionAgy,
+  sanitizarTaskIdParaArchivo,
   construirPromptCortoAgy,
   escribirContextoEnWorktree,
   sistemaArchivosNode,
@@ -70,6 +71,28 @@ describe("AntigravityRunner (Hito 8 - ADR 021)", () => {
     expect(esWorktreeValido("/tmp/otro-lado", raizCustom)).toBe(false);
   });
 
+  it("esWorktreeValido no da falsos positivos con nombres con puntos ni raíz vacía", () => {
+    // Nombres legítimos con puntos deben aceptarse en modo canónico.
+    expect(esWorktreeValido("/repo/.batuta/worktrees/my..dir")).toBe(true);
+    expect(esWorktreeValido("/repo/.batuta/worktrees/...")).toBe(true);
+    expect(esWorktreeValido("/repo/.batuta/worktrees/..foo")).toBe(true);
+    // Escape real por segmento debe rechazarse (sale de worktrees).
+    expect(esWorktreeValido("/repo/.batuta/worktrees/../afuera")).toBe(false);
+    // Raíz vacía se trata como no especificada (canónico).
+    expect(esWorktreeValido("/repo/.batuta/worktrees/run-1", "")).toBe(true);
+  });
+
+  it("sanitizarTaskIdParaArchivo confina nombres de log (H-A1)", () => {
+    expect(sanitizarTaskIdParaArchivo("tarea-1")).toBe("tarea-1");
+    expect(sanitizarTaskIdParaArchivo("ABC_123-xyz")).toBe("ABC_123-xyz");
+    const traversal = sanitizarTaskIdParaArchivo("../../evil");
+    expect(traversal).not.toContain("/");
+    expect(traversal).not.toContain(".");
+    expect(traversal).toHaveLength(16);
+    expect(sanitizarTaskIdParaArchivo("a/b")).toHaveLength(16);
+    expect(sanitizarTaskIdParaArchivo("..\\evil")).toHaveLength(16);
+  });
+
   it("rechaza la ejecución si el directorio de trabajo no es un worktree válido hijo", async () => {
     const runner = new AntigravityRunner();
     const res = await runner.ejecutar(INPUT_TEST, {
@@ -94,6 +117,57 @@ describe("AntigravityRunner (Hito 8 - ADR 021)", () => {
     expect(res.exito).toBe(false);
     expect(res.motivoFallo).toBe("error_proceso");
     expect(res.output).toBeNull();
+  });
+
+  it("asegurarExclude resuelve gitdir relativo y no omite .batuta/ por substring (B2)", async () => {
+    const archivos = new Map<string, string>();
+    const worktree = join(tmpdir(), "fake-work-run-1");
+    const gitdirAbs = join(worktree, "..", "..", ".git", "worktrees", "run-1");
+    const excludeAbs = join(gitdirAbs, "info", "exclude");
+    // .git vinculado con gitdir relativo + exclude preexistente solo con contexto.
+    archivos.set(join(worktree, ".git"), "gitdir: ../../.git/worktrees/run-1\n");
+    archivos.set(excludeAbs, ".batuta/contexto/\n");
+    const agregados: string[] = [];
+    const fsMock = {
+      crearDir: async () => undefined,
+      leerArchivo: async (ruta: string) => {
+        const v = archivos.get(ruta);
+        if (v === undefined) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+        return v;
+      },
+      escribirArchivo: async (ruta: string, datos: string) => {
+        archivos.set(ruta, datos);
+      },
+      escribirExclusivo: async () => undefined,
+      agregarArchivo: async (ruta: string, datos: string) => {
+        agregados.push(`${ruta}::${datos}`);
+        archivos.set(ruta, (archivos.get(ruta) ?? "") + datos);
+      },
+      renombrar: async () => undefined,
+      listarDir: async () => [],
+      borrar: async () => undefined,
+    };
+    await escribirContextoEnWorktree(
+      fsMock,
+      worktree,
+      {
+        spec: "spec",
+        plan: {},
+        subtarea: {
+          id: "sub-1",
+          titulo: "T",
+          complejidad: "baja",
+          archivos: [],
+          criterios: [],
+        },
+      },
+    );
+    // Debe haber resuelto contra el worktree, no contra cwd, y agregar .batuta/ faltante.
+    expect(agregados.length).toBe(1);
+    const rutaNorm = agregados[0]!.replace(/\\/g, "/");
+    expect(rutaNorm).toContain("worktrees/run-1/info/exclude");
+    expect(agregados[0]).toContain(".batuta/");
+    expect(archivos.get(excludeAbs)).toContain(".batuta/");
   });
 
   it("escribe contexto en .batuta/contexto/ y construye prompt corto para agy", async () => {

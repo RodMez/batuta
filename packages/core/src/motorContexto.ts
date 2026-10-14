@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { dirname, join, resolve, isAbsolute } from "node:path";
 import type { SistemaArchivos } from "./sistema.js";
 import type { Subtask } from "./plan.js";
 
@@ -91,9 +91,14 @@ async function asegurarExcludeWorktree(
     let rutaExclude: string;
     try {
       const contenidoGit = await fs.leerArchivo(rutaGitArchivo);
-      const match = contenidoGit.match(/gitdir:\s*(.+)/);
+      const match = contenidoGit.match(/^gitdir:\s*(\S+?)\s*$/m);
       if (match && match[1]) {
-        rutaExclude = join(match[1].trim(), "info", "exclude");
+        const gitdirCrudo = match[1].trim();
+        // gitdir suele ser relativo al worktree: resolver contra worktreeRuta.
+        const gitdirAbs = isAbsolute(gitdirCrudo)
+          ? gitdirCrudo
+          : resolve(worktreeRuta, gitdirCrudo);
+        rutaExclude = join(gitdirAbs, "info", "exclude");
       } else {
         rutaExclude = join(worktreeRuta, ".git", "info", "exclude");
       }
@@ -108,9 +113,13 @@ async function asegurarExcludeWorktree(
       contenidoActual = "";
     }
 
-    const aAgregar = entradas.filter((e) => !contenidoActual.includes(e));
+    // Comparar por líneas exactas (evita falso positivo por substring).
+    const lineas = new Set(
+      contenidoActual.split(/\r?\n/).map((l) => l.trim()),
+    );
+    const aAgregar = entradas.filter((e) => !lineas.has(e));
     if (aAgregar.length > 0) {
-      await fs.crearDir(join(rutaExclude, ".."));
+      await fs.crearDir(dirname(rutaExclude));
       await fs.agregarArchivo(rutaExclude, `\n${aAgregar.join("\n")}\n`);
     }
   } catch {
