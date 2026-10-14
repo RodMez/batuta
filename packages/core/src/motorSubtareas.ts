@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { esWorktreeValido } from "./antigravityRunner.js";
 import type { AgentRole } from "./agentContract.js";
 import type { AgentInput } from "./agentContract.js";
 import type { AgentCallContext } from "./agentRunner.js";
@@ -115,23 +116,60 @@ export async function ejecutarSubtarea(
     const ultimoInforme =
       sub.informes.length > 0 ? sub.informes[sub.informes.length - 1]! : "";
 
-    // Escribir contexto en .batuta/contexto/ dentro del worktree (ADR 021, Decisión 6)
-    const contextoArchivos = await escribirContextoEnWorktree(
-      deps.fs,
-      worktreeRuta,
-      {
-        spec,
-        plan,
-        subtarea,
-        reglasRepo,
-        ultimoInforme,
-        ultimaRespuesta: sub.ultimaRespuesta,
-      },
-    );
-
     const tipoRunner = resolverTipoRunner(config);
-    let prompt: string;
+    // Raíz esperada normalizada igual que git.ts: relativa se resuelve contra el repo.
+    const raizCruda = config.directorio_worktrees ?? join(dirBatuta, "worktrees");
+    const raizWorktrees = isAbsolute(raizCruda)
+      ? raizCruda
+      : resolve(dirname(dirBatuta), raizCruda);
+
+    // Contexto en archivos solo para antigravity (ADR 021 Dec. 6): evita I/O
+    // inútil en claude-code y archivos feedback/AGENTS obsoletos entre intentos.
+    let contextoArchivos: {
+      specRutaRel: string;
+      planRutaRel: string;
+      feedbackRutaRel?: string;
+      reglasRepoRutaRel?: string;
+      dirContexto: string;
+    } | null = null;
     if (tipoRunner === "antigravity") {
+      // Validar antes de escribir (H-A2): no crear archivos fuera del worktree.
+      if (!esWorktreeValido(worktreeRuta, raizWorktrees)) {
+        throw new Error(
+          `Seguridad: worktree no válido "${worktreeRuta}" para la raíz "${raizWorktrees}"`,
+        );
+      }
+      contextoArchivos = await escribirContextoEnWorktree(
+        deps.fs,
+        worktreeRuta,
+        {
+          spec,
+          plan,
+          subtarea,
+          reglasRepo,
+          ultimoInforme,
+          ultimaRespuesta: sub.ultimaRespuesta,
+        },
+      );
+      // Limpiar archivos obsoletos del intento anterior si esta vez no tocan.
+      if (!contextoArchivos.feedbackRutaRel) {
+        try {
+          await deps.fs.borrar(join(contextoArchivos.dirContexto, "feedback.md"));
+        } catch {
+          // Tolerar ENOENT: puede no existir.
+        }
+      }
+      if (!contextoArchivos.reglasRepoRutaRel) {
+        try {
+          await deps.fs.borrar(join(contextoArchivos.dirContexto, "AGENTS.md"));
+        } catch {
+          // Tolerar ENOENT.
+        }
+      }
+    }
+
+    let prompt: string;
+    if (tipoRunner === "antigravity" && contextoArchivos) {
       prompt = construirPromptCortoAgy(rol, subtarea, {
         specRel: contextoArchivos.specRutaRel,
         planRel: contextoArchivos.planRutaRel,
@@ -159,8 +197,6 @@ export async function ejecutarSubtarea(
       max_steps: config.limites.pasos_por_agente,
     };
 
-    const raizWorktrees =
-      config.directorio_worktrees ?? join(dirBatuta, "worktrees");
     const contexto: AgentCallContext = {
       directorioTrabajo: worktreeRuta,
       rol,
