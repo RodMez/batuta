@@ -240,7 +240,7 @@ export class AntigravityRunner implements AgentRunner {
     const rutaSchema = join(tmpdir(), `batuta-schema-${idSchema}.json`);
     await writeFile(rutaSchema, JSON.stringify(AgentOutputJsonSchema), "utf8");
 
-    let reintentos = 0;
+    const reintentos = 0;
     try {
       // Función interna de ejecución de intento
       const ejecutarIntento = async (promptTexto: string): Promise<ResultadoComando> => {
