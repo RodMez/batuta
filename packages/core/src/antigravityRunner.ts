@@ -274,7 +274,10 @@ export class AntigravityRunner implements AgentRunner {
     // 3. Escribir el esquema JSON a un archivo temporal para evitar problemas de escape en Windows
     const idSchema = randomUUID();
     const rutaSchema = join(tmpdir(), `batuta-schema-${idSchema}.json`);
-    await writeFile(rutaSchema, JSON.stringify(AgentOutputJsonSchema), "utf8");
+    await writeFile(rutaSchema, JSON.stringify(AgentOutputJsonSchema), {
+      encoding: "utf8",
+      mode: 0o600,
+    });
 
     const reintentos = 0;
     try {
@@ -296,14 +299,38 @@ export class AntigravityRunner implements AgentRunner {
         // Construir entorno con variables limpias + variables OAuth de agy según plataforma
         const entornoExtra: Record<string, string> = {};
         for (const clave of obtenerVariablesSesionAgy(this.plataforma)) {
-          if (process.env[clave] !== undefined) {
-            entornoExtra[clave] = process.env[clave]!;
+          const valor = process.env[clave];
+          if (valor !== undefined) {
+            entornoExtra[clave] = valor;
           }
         }
 
-        // Si el contexto suministró variables extra (fixtures), inyectarlas
+        // Si el contexto suministró variables extra, inyectarlas con allowlist
+        // para no permitir sobrescribir PATH ni variables de sesión (M-5).
         if (contexto.entorno) {
-          Object.assign(entornoExtra, contexto.entorno);
+          for (const [clave, valor] of Object.entries(contexto.entorno)) {
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(clave)) continue;
+            if (clave.length > 64 || valor.length > 4096) continue;
+            const upper = clave.toUpperCase();
+            if (
+              upper === "PATH" ||
+              upper === "PATHEXT" ||
+              upper === "SYSTEMROOT" ||
+              upper === "COMSPEC" ||
+              upper === "TEMP" ||
+              upper === "TMP" ||
+              upper === "HOME" ||
+              upper === "USERPROFILE" ||
+              upper === "APPDATA" ||
+              upper === "LOCALAPPDATA" ||
+              upper === "NODE_OPTIONS" ||
+              upper === "LD_PRELOAD" ||
+              upper === "DYLD_INSERT_LIBRARIES"
+            ) {
+              continue;
+            }
+            entornoExtra[clave] = valor;
+          }
         }
 
         return this.ejecutor.ejecutarArgs(this.binPath, args, {
@@ -372,7 +399,7 @@ export class AntigravityRunner implements AgentRunner {
 
         // Distinguir error del sandbox de terminal (ADR 021, Sección 6.3)
         const salidaCombinada = `${resultadoCmd.salidaError}\n${resultadoCmd.salidaEstandar}`;
-        if (salidaCombinada.includes("connecting to sandbox server: EOF")) {
+        if (/connecting to sandbox server:\s*EOF/i.test(salidaCombinada)) {
           await this.guardarLog(
             rutaLog,
             `[ERROR SANDBOX TERMINAL] El subproceso agy falló al intentar ejecutar terminal bloqueada por el sandbox (connecting to sandbox server: EOF).\nStderr: ${resultadoCmd.salidaError}`,
@@ -544,7 +571,8 @@ export class AntigravityRunner implements AgentRunner {
     const dirBase =
       contexto.directorioLogs ??
       join(contexto.directorioTrabajo, ".batuta", "logs");
-    return join(dirBase, `agente-${contexto.rol}-${taskId}-${Date.now()}.log`);
+    const taskSeguro = sanitizarTaskIdParaArchivo(taskId);
+    return join(dirBase, `agente-${contexto.rol}-${taskSeguro}-${Date.now()}.log`);
   }
 
   private async guardarLog(rutaArchivo: string, contenido: string): Promise<void> {

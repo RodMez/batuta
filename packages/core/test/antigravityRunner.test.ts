@@ -549,6 +549,55 @@ describe("AntigravityRunner (Hito 8 - ADR 021)", () => {
     expect(res.output).toBeNull();
   });
 
+  it("filtra entorno extra peligroso y detecta sandbox EOF sin importar mayúsculas", async () => {
+    let entornoCapturado: Record<string, string> | undefined;
+    const ejecutorMock: EjecutorComandos = {
+      ejecutarArgs: async (_cmd, _args, opciones) => {
+        entornoCapturado = opciones?.entornoExtra;
+        return {
+          codigoSalida: 1,
+          salidaEstandar: "",
+          salidaError: "CONNECTING TO SANDBOX SERVER: eof",
+          duracionMs: 50,
+          timeoutVencido: false,
+        };
+      },
+      ejecutar: async () => {
+        throw new Error("No debe llamar");
+      },
+    };
+    const cuotaManagerMock = {
+      verificarCuotaModelo: async () => ({
+        suficiente: true,
+        bucketsBajoUmbral: [],
+        resetTimeMasTardio: null,
+      }),
+    } as unknown as CuotaManager;
+    const runner = new AntigravityRunner(
+      { validarRutaWorktree: false },
+      { ejecutor: ejecutorMock, cuotaManager: cuotaManagerMock },
+    );
+    const res = await runner.ejecutar(
+      { ...INPUT_TEST, task_id: "../../evil" },
+      {
+        ...CONTEXTO_TEST,
+        entorno: {
+          PATH: "/malicioso",
+          BATUTA_FIXTURE: "ok",
+          "clave-mala": "x",
+          NODE_OPTIONS: "--require evil",
+        },
+      },
+    );
+    expect(res.motivoFallo).toBe("error_herramienta");
+    expect(entornoCapturado?.PATH).not.toBe("/malicioso");
+    expect(entornoCapturado?.BATUTA_FIXTURE).toBe("ok");
+    expect(entornoCapturado?.["clave-mala"]).toBeUndefined();
+    expect(entornoCapturado?.NODE_OPTIONS).toBeUndefined();
+    // El log usa task_id sanitizado, sin traversal.
+    expect(res.rutaLog.replace(/\\/g, "/")).not.toContain("../");
+  });
+
   it("mapea variables de sesión requeridas por plataforma (ADR 021)", () => {
     const varsWindows = obtenerVariablesSesionAgy("win32");
     expect(varsWindows).toEqual(["USERPROFILE", "APPDATA", "LOCALAPPDATA"]);

@@ -354,9 +354,7 @@ export async function loadBatutaConfig(filePath: string): Promise<BatutaConfig> 
  * Si se definió explícitamente `runner.tipo`, prevalece.
  * En caso contrario, se deriva de `config.ejecutor` (por defecto "claude-code").
  */
-export function resolverTipoRunner(
-  config: BatutaConfig,
-): RunnerTipo | (typeof EJECUTOR_VALUES)[number] {
+export function resolverTipoRunner(config: BatutaConfig): RunnerTipo {
   if (config.runner?.tipo) {
     return config.runner.tipo;
   }

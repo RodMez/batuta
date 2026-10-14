@@ -1,5 +1,8 @@
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { esWorktreeValido } from "./antigravityRunner.js";
+import {
+  esWorktreeValido,
+  LIMITE_LONGITUD_PROMPT_AGY,
+} from "./antigravityRunner.js";
 import type { AgentRole } from "./agentContract.js";
 import type { AgentInput } from "./agentContract.js";
 import type { AgentCallContext } from "./agentRunner.js";
@@ -185,6 +188,21 @@ export async function ejecutarSubtarea(
         ultimoInforme,
         sub.ultimaRespuesta,
         continuacionResumen ?? undefined,
+      );
+    }
+
+    // Falla rápido sin reintentos si el prompt supera el límite de agy (M2):
+    // reintentar con el mismo prompt determinista desperdicia cuota y git.
+    if (
+      tipoRunner === "antigravity" &&
+      prompt.length > LIMITE_LONGITUD_PROMPT_AGY
+    ) {
+      return fallarEjecucion(
+        deps,
+        dirBatuta,
+        runId,
+        progreso,
+        `Prompt para agy demasiado largo (${prompt.length} > ${LIMITE_LONGITUD_PROMPT_AGY}). Reduce archivos o títulos.`,
       );
     }
 
