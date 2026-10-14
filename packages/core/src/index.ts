@@ -169,6 +169,7 @@ export {
   parsearLineasAnadidasDiff,
   parsearNumstatZ,
   parsearWorktreesPorcelain,
+  resolverDirectorioWorktrees,
   VERSION_MINIMA_GIT,
 } from "./git.js";
 export type {

@@ -4,8 +4,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   EjecutorComandosReal,
+  esWorktreeValido,
   ModuloGitReal,
   MotorFlujo,
+  resolverDirectorioWorktrees,
   RunStore,
   parseBatutaConfig,
   sistemaArchivosNode,
@@ -216,5 +218,53 @@ describe("MotorFlujo - Pausa por Cuota y Reanudación (WAITING_QUOTA)", () => {
     expect(tipos).toContain("advertencia");
     expect(tipos).toContain("ejecucion_reanudada");
     expect(notificador.avisos.some((a) => a.tipo === "pausa_cuota")).toBe(true);
+  }, 30_000);
+
+  it("raíz unificada acepta el worktree real por defecto y respeta timeout de runner (G-01, G-02)", async () => {
+    const repo = await crearRepo();
+    const ejecutor = new EjecutorComandosReal();
+    const git = new ModuloGitReal(ejecutor);
+    const info = await git.crearWorktree(repo, "run-raiz-u1");
+    try {
+      const raiz = resolverDirectorioWorktrees(repo, undefined);
+      expect(esWorktreeValido(info.ruta, raiz)).toBe(true);
+      // La raíz unificada coincide con el padre real del worktree.
+      expect(info.ruta.startsWith(raiz)).toBe(true);
+    } finally {
+      await git.eliminarWorktree(info.ruta).catch(() => undefined);
+    }
+  }, 30_000);
+
+  it("motor usa runner.timeout_seg para antigravity en vez de pisarlo con 120s (G-02)", async () => {
+    const repo = await crearRepo();
+    const dirBatuta = join(repo, ".batuta");
+    const ejecutor = new EjecutorComandosReal();
+    const git = new ModuloGitReal(ejecutor);
+    const reloj = crearRelojFijo("2026-10-13T20:00:00Z");
+    const store = new RunStore(dirBatuta, sistemaArchivosNode, reloj);
+    const runner = new RunnerGuionado(async () => resultadoCuotaAgotada());
+    const motor = new MotorFlujo({
+      runner,
+      git,
+      ejecutor,
+      store,
+      reloj,
+      notificador: new NotificadorGrabador(),
+      fs: sistemaArchivosNode,
+    });
+    const config = parseBatutaConfig({
+      ...(configBase(repo) as unknown as Record<string, unknown>),
+      runner: { tipo: "antigravity", bin_path: "agy", timeout_seg: 300, umbral_cuota: 0.05, sandbox: true },
+    } as unknown as Parameters<typeof parseBatutaConfig>[0]);
+    await motor.iniciar({
+      config,
+      specContenido: SPEC_TXT,
+      planContenido: PLAN_OBJ,
+      reglasRepo: "reglas",
+      directorioRepo: repo,
+      dirBatuta,
+    });
+    expect(runner.llamadas.length).toBeGreaterThan(0);
+    expect(runner.llamadas[0]?.contexto.limites?.timeoutMs).toBe(300_000);
   }, 30_000);
 });

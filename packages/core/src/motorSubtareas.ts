@@ -1,8 +1,9 @@
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import {
   esWorktreeValido,
   LIMITE_LONGITUD_PROMPT_AGY,
 } from "./antigravityRunner.js";
+import { resolverDirectorioWorktrees } from "./git.js";
 import type { AgentRole } from "./agentContract.js";
 import type { AgentInput } from "./agentContract.js";
 import type { AgentCallContext } from "./agentRunner.js";
@@ -120,11 +121,11 @@ export async function ejecutarSubtarea(
       sub.informes.length > 0 ? sub.informes[sub.informes.length - 1]! : "";
 
     const tipoRunner = resolverTipoRunner(config);
-    // Raíz esperada normalizada igual que git.ts: relativa se resuelve contra el repo.
-    const raizCruda = config.directorio_worktrees ?? join(dirBatuta, "worktrees");
-    const raizWorktrees = isAbsolute(raizCruda)
-      ? raizCruda
-      : resolve(dirname(dirBatuta), raizCruda);
+    // Raíz unificada con git.ts: mismo cálculo que crearWorktree.
+    const raizWorktrees = resolverDirectorioWorktrees(
+      dirname(dirBatuta),
+      config.directorio_worktrees,
+    );
 
     // Contexto en archivos solo para antigravity (ADR 021 Dec. 6): evita I/O
     // inútil en claude-code y archivos feedback/AGENTS obsoletos entre intentos.
@@ -218,6 +219,10 @@ export async function ejecutarSubtarea(
       max_steps: config.limites.pasos_por_agente,
     };
 
+    const timeoutMs =
+      tipoRunner === "antigravity" && config.runner?.timeout_seg !== undefined
+        ? config.runner.timeout_seg * 1000
+        : config.limites.timeout_comando_seg * 1000;
     const contexto: AgentCallContext = {
       directorioTrabajo: worktreeRuta,
       rol,
@@ -226,7 +231,7 @@ export async function ejecutarSubtarea(
       limites: {
         budgetLimitUsd: config.limites.usd_por_agente,
         maxSteps: config.limites.pasos_por_agente,
-        timeoutMs: config.limites.timeout_comando_seg * 1000,
+        timeoutMs,
       },
       permisos: { soloLectura: false, comandosPermitidos: [] },
       entorno: {},
