@@ -1,0 +1,46 @@
+# Configuración de ejemplo de Batuta usando AntigravityRunner (Hito 8 - ADR 021)
+version_esquema: 1
+proyecto: "."
+
+runner:
+  tipo: "antigravity"
+  bin_path: "agy"                # Resoluble en el PATH o ruta absoluta al ejecutable agy
+  timeout_seg: 300               # 5 minutos por llamada de agente
+  umbral_cuota: 0.05             # Pausar si remaining_fraction del bucket < 5%
+  sandbox: true                  # Ejecución segura con flags de sandbox
+
+alias_modelos:
+  gemini-low:
+    modelo: "gemini-3.8-flash-low"
+    ventana: 1000000
+  gemini-med:
+    modelo: "gemini-3.8-flash-medium"
+    ventana: 1000000
+  claude-sonnet:
+    modelo: "claude-sonnet-4-6"
+    ventana: 200000
+  claude-opus:
+    modelo: "claude-opus-4-6-thinking"
+    ventana: 200000
+  gpt-oss:
+    modelo: "gpt-oss-120b-medium"
+    ventana: 128000
+
+modelos:
+  scout: "gemini-low"
+  resumenes: "gemini-low"
+  architect: "claude-sonnet"
+  software-engineer:
+    baja: "gemini-med"
+    media: "claude-sonnet"
+    alta: "claude-opus"
+  debugger: "claude-opus"
+  revisores: "gpt-oss"
+
+gates:
+  - nombre: typecheck
+    comando: "npm run typecheck"
+    timeout_seg: 60
+  - nombre: test
+    comando: "npm test"
+    timeout_seg: 120
