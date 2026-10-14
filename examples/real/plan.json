@@ -1,0 +1,11 @@
+{
+  "subtareas": [
+    {
+      "id": "SUB-01",
+      "titulo": "Crear la función saludo y sus pruebas",
+      "archivos": ["saludo.js", "saludo.test.js"],
+      "criterios": ["CA-1"],
+      "complejidad": "baja"
+    }
+  ]
+}
