@@ -192,6 +192,16 @@ describe("Política de diff (CA-8)", () => {
     expect(normalizarRutaDiff("src\\components\\App.tsx")).toBe("src/components/App.tsx");
     expect(normalizarRutaDiff(".\\src\\index.ts")).toBe("src/index.ts");
     expect(normalizarRutaDiff("/src/style.css")).toBe("src/style.css");
+    expect(normalizarRutaDiff("src//a/./b.ts")).toBe("src/a/b.ts");
+    expect(normalizarRutaDiff(".batuta\\contexto\\spec.md")).toBe(".batuta/contexto/spec.md");
+  });
+
+  it("no excluye escapes .batuta/contexto/../ fuera del contexto", () => {
+    const cambios: CambioArchivo[] = [
+      { ruta: ".batuta/contexto/../config.yaml", lineasAnadidas: 1, lineasEliminadas: 0 },
+    ];
+    const v = evaluarDiff(cambios, { archivosPermitidos: ["src/app.ts"] });
+    expect(v.some((x) => x.archivo === ".batuta/contexto/../config.yaml")).toBe(true);
   });
 
   it("excluye estrictamente .batuta/contexto/ pero evalúa otros cambios en .batuta/", () => {

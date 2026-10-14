@@ -29,9 +29,11 @@ export interface ViolacionDiff {
   mensaje: string;
 }
 
+import { posix } from "node:path";
+
 /**
- * Normaliza una ruta convirtiendo separadores de Windows `\` a `/`
- * y eliminando prefijos `./` o `/`.
+ * Normaliza una ruta convirtiendo separadores de Windows `\` a `/`,
+ * colapsando `//`, `/./` y segmentos `..`, y eliminando prefijos `./` o `/`.
  */
 export function normalizarRutaDiff(ruta: string): string {
   let normal = ruta.replace(/\\/g, "/");
@@ -40,6 +42,11 @@ export function normalizarRutaDiff(ruta: string): string {
   }
   if (normal.startsWith("/")) {
     normal = normal.slice(1);
+  }
+  normal = posix.normalize(normal);
+  if (normal === ".") return "";
+  while (normal.startsWith("./")) {
+    normal = normal.slice(2);
   }
   return normal;
 }
