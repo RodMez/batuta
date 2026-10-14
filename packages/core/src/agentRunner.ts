@@ -26,6 +26,7 @@ export const MotivoFalloAgenteSchema = z.enum([
   "salida_invalida",
   "error_herramienta",
   "error_proceso",
+  "cuota_agotada",
 ]);
 
 export type MotivoFalloAgente = z.infer<typeof MotivoFalloAgenteSchema>;

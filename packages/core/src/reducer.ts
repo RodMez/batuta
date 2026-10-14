@@ -34,6 +34,15 @@ export const LimitePayloadSchema = z
   .strictObject({ limite: z.string().min(1) })
   .catchall(z.unknown());
 
+export const PausaCuotaPayloadSchema = z
+  .strictObject({
+    reset_time: z.string().nullable().optional(),
+    buckets_bajo_umbral: z.array(z.string()).default([]),
+    modelo: z.string().min(1).optional(),
+    retomar_en: RunStatusSchema.optional(),
+  })
+  .catchall(z.unknown());
+
 export type AprobacionPayload = z.infer<typeof AprobacionPayloadSchema>;
 export type AgenteCompletadoPayload = z.infer<
   typeof AgenteCompletadoPayloadSchema
@@ -42,6 +51,7 @@ export type EntradaRecibidaPayload = z.infer<
   typeof EntradaRecibidaPayloadSchema
 >;
 export type LimitePayload = z.infer<typeof LimitePayloadSchema>;
+export type PausaCuotaPayload = z.infer<typeof PausaCuotaPayloadSchema>;
 
 const TERMINALES: readonly RunStatus[] = ["DONE", "FAILED", "ABORTED"];
 
@@ -305,7 +315,24 @@ export function applyEvent(estado: RunState, evento: BatutaEvent): RunState {
       }
       return { ...base, estado: retomar_en };
     }
-    case "ejecucion_reanudada":
+    case "ejecucion_pausada_por_cuota": {
+      if (esTerminal(estado.estado)) {
+        throw imposible(evento, estado, "No se puede pausar una ejecución terminal.");
+      }
+      return { ...base, estado: "WAITING_QUOTA", puerta_pendiente: null };
+    }
+    case "ejecucion_reanudada": {
+      if (estado.estado === "WAITING_QUOTA") {
+        const payload = (evento.payload ?? {}) as Record<string, unknown>;
+        const parseRetomar = RunStatusSchema.safeParse(payload.retomar_en);
+        const retomarEn =
+          parseRetomar.success && !esTerminal(parseRetomar.data)
+            ? parseRetomar.data
+            : "IMPLEMENT";
+        return { ...base, estado: retomarEn };
+      }
+      return base;
+    }
     case "advertencia":
     case "contexto_resumido": {
       return base;

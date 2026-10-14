@@ -238,6 +238,16 @@ export function evaluarDiff(
 
   for (const cambio of cambios) {
     const rutaNorm = normalizarRutaDiff(cambio.ruta);
+
+    // .batuta/contexto/ y archivos internos de Batuta quedan excluidos del diff
+    if (
+      rutaNorm.startsWith(".batuta/contexto/") ||
+      rutaNorm === ".batuta/contexto" ||
+      rutaNorm.startsWith(".batuta/")
+    ) {
+      continue;
+    }
+
     totalLineasDiff += cambio.lineasAnadidas + cambio.lineasEliminadas;
 
     // 1. Comprobar rutas prohibidas
