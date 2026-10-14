@@ -222,6 +222,25 @@ describe("AntigravityRunner (Hito 8 - ADR 021)", () => {
     }
   });
 
+  it("construirPromptCortoAgy trunca archivos y títulos largos por debajo de 4000 (M3)", () => {
+    const muchos = Array.from({ length: 100 }, (_, i) => `src/archivo-${i}.ts`);
+    const prompt = construirPromptCortoAgy(
+      "software-engineer",
+      {
+        id: "sub-x",
+        titulo: `${"T".repeat(300)}\ncon salto`,
+        complejidad: "alta",
+        archivos: muchos,
+        criterios: [],
+      },
+      { specRel: ".batuta/contexto/spec.md", planRel: ".batuta/contexto/plan.json" },
+    );
+    expect(prompt.length).toBeLessThan(4000);
+    expect(prompt).toContain("(+80 más)");
+    expect(prompt).toContain('localiza la subtarea con id "sub-x"');
+    expect(prompt).not.toContain("\ncon salto");
+  });
+
   it("ejecuta con éxito cuando structured_output es válido y reporta tokens", async () => {
     let argsCapturados: readonly string[] = [];
 

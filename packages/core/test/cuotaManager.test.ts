@@ -166,7 +166,30 @@ describe("Módulo de Cuotas (cuotaManager)", () => {
 
     expect(() =>
       evaluarCuota(bucketsAjenos, "gemini-3.8-flash-low", 0.05),
-    ).toThrow(/No se encontró ninguno de los buckets de cuota requeridos/);
+    ).toThrow(/Catálogo de cuota incompleto/);
+  });
+
+  it("falla si falta uno de los dos buckets del par (1/2) para no perder control", () => {
+    const soloUno = [
+      {
+        id: "3p-5h",
+        remaining_fraction: 0.9,
+        reset_time: "2026-10-14T05:00:00Z",
+      },
+    ];
+    expect(() => evaluarCuota(soloUno, "claude-sonnet-4-6", 0.05)).toThrow(
+      /faltan los buckets.*3p-weekly/,
+    );
+  });
+
+  it("reset_time ausente deja resetTimeMasTardio en null para reanudar sin hora exacta", () => {
+    const sinReset = [
+      { id: "3p-5h", remaining_fraction: 0.01 },
+      { id: "3p-weekly", remaining_fraction: 0.01 },
+    ];
+    const res = evaluarCuota(sinReset, "claude-sonnet-4-6", 0.05);
+    expect(res.suficiente).toBe(false);
+    expect(res.resetTimeMasTardio).toBeNull();
   });
 
   it("CuotaManager lanza error real si la llamada a /usage falla", async () => {

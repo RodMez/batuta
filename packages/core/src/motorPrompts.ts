@@ -46,7 +46,8 @@ export interface RutasContextoAgy {
 }
 
 /**
- * Construye un prompt corto (<500 caracteres) para agy conforme a la Decisión 6 de ADR 021.
+ * Construye un prompt corto (<500 caracteres en uso típico, siempre <4000)
+ * para agy conforme a la Decisión 6 de ADR 021.
  * En lugar de incrustar specs gigantes, planes completos y esquemas en el flag -p,
  * referencia los archivos depositados en .batuta/contexto/ dentro del worktree.
  */
@@ -55,13 +56,19 @@ export function construirPromptCortoAgy(
   subtarea: Subtask,
   rutas: RutasContextoAgy,
 ): string {
-  const archivos = subtarea.archivos.join(", ");
+  const tituloUnaLinea = subtarea.titulo.replace(/[\r\n]+/g, " ").trim().slice(0, 200);
+  const maxArchivos = 20;
+  const archivosVisibles = subtarea.archivos.slice(0, maxArchivos);
+  const restantes = subtarea.archivos.length - archivosVisibles.length;
+  const archivos =
+    archivosVisibles.join(", ") +
+    (restantes > 0 ? ` …(+${restantes} más)` : "");
   const lineas = [
-    `Rol: ${rol}. Tarea: ${subtarea.id} - ${subtarea.titulo}.`,
+    `Rol: ${rol}. Tarea: ${subtarea.id} - ${tituloUnaLinea}.`,
     `Archivos permitidos para editar: ${archivos}.`,
     `Requisitos y contexto del proyecto:`,
     `- Especificación: "${rutas.specRel}"`,
-    `- Plan: "${rutas.planRel}"`,
+    `- Plan: "${rutas.planRel}" (localiza la subtarea con id "${subtarea.id}" para ver descripción y criterios)`,
     rutas.feedbackRel ? `- Feedback previo: "${rutas.feedbackRel}"` : "",
     rutas.reglasRepoRel ? `- Reglas del repositorio: "${rutas.reglasRepoRel}"` : "",
     `Instrucción: Implementa los cambios requeridos únicamente en los archivos permitidos y devuelve tu respuesta estructurada según el esquema solicitado.`,

@@ -132,12 +132,16 @@ export function evaluarCuota(
     }
   }
 
-  // Si no se encontró ninguno de los buckets esperados, fallar para no perder el control silenciosamente
-  if (evaluados.length === 0) {
+  // Exigir el par completo (2/2): si falta alguno, fallar para no perder
+  // el control silenciosamente (un bucket ausente podría estar agotado).
+  if (evaluados.length !== idsEsperados.length) {
+    const faltantes = idsEsperados.filter((id) => !mapaBuckets.has(id));
     throw new Error(
-      `No se encontró ninguno de los buckets de cuota requeridos (${idsEsperados.join(
+      `Catálogo de cuota incompleto para el modelo "${nombreModelo}": faltan los buckets (${faltantes.join(
         ", ",
-      )}) para el modelo "${nombreModelo}" en la salida de /usage. Verifica la versión de agy o la configuración.`,
+      )}); esperados (${idsEsperados.join(
+        ", ",
+      )}). Verifica la versión de agy o repite la operación.`,
     );
   }
 
