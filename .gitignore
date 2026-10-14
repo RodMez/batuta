@@ -6,3 +6,6 @@ coverage/
 .batuta/
 *.tsbuildinfo
 batuta-contexto/
+auditoria-batuta.txt
+auditoria-completa.txt
+correciones.py
