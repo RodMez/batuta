@@ -18,6 +18,7 @@ import { ejecutarRun } from "../src/comandos/run.js";
 import { asegurarExclusionBatuta } from "../src/comandos/run.js";
 import { ejecutarStatus, StatusJsonSchema } from "../src/comandos/status.js";
 import { crearRunner, entornoReal } from "../src/contexto.js";
+import { ejecutarChequeos, parsearModelosAgy } from "../src/preflight.js";
 import { CONFIG_DEMO, PLAN_UNA, crearRepoDesechable, guionEscribe } from "./utilidades.js";
 
 const CONFIG_LIBRE = [
@@ -391,4 +392,88 @@ describe("manejadores de la CLI", () => {
     const runnerAgy = crearRunner(entorno, configAgy);
     expect(runnerAgy).toBeInstanceOf(AntigravityRunner);
   });
+
+  it("parsearModelosAgy extrae identificadores de modelo ignorando lineas de carga", () => {
+    const salidaEjemplo = [
+      "Fetching available models...",
+      "gemini-3.8-flash-high\tGemini 3.8 Flash (High)",
+      "gemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)",
+      "gemini-3.8-flash-low\tGemini 3.8 Flash (Low)",
+      "claude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)",
+    ].join("\n");
+
+    const modelos = parsearModelosAgy(salidaEjemplo);
+    expect(modelos).toEqual([
+      "gemini-3.8-flash-high",
+      "gemini-3.8-flash-medium",
+      "gemini-3.8-flash-low",
+      "claude-sonnet-4-6",
+    ]);
+  });
+
+  it("preflight con runner antigravity valida que los modelos configurados existan en agy models", async () => {
+    const { repoDir, limpiar } = await crearRepoDesechable();
+    limpiezas.push(limpiar);
+
+    const configPath = join(repoDir, "batuta.yaml");
+    await writeFile(
+      configPath,
+      [
+        "proyecto: .",
+        "runner:",
+        "  tipo: antigravity",
+        "alias_modelos:",
+        "  rapido: { modelo: gemini-3.8-flash-low, ventana: 100000 }",
+        "  medio: { modelo: gemini-3.8-flash-medium, ventana: 100000 }",
+        "  fuerte: { modelo: modelo-inexistente-xyz, ventana: 200000 }",
+        "  revisor: { modelo: gemini-3.8-flash-low, ventana: 100000 }",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+      "utf8",
+    );
+    await confirmarTodo(repoDir);
+
+
+    const ejecutorMock: EjecutorComandos = {
+      ejecutar: async () => {
+        throw new Error("No debe llamar");
+      },
+      ejecutarArgs: async (bin, args) => {
+        if (bin === "agy" && args[0] === "models") {
+          return {
+            codigoSalida: 0,
+            salidaEstandar: [
+              "Fetching available models...",
+              "gemini-3.8-flash-high\tGemini 3.8 Flash (High)",
+              "gemini-3.8-flash-low\tGemini 3.8 Flash (Low)",
+            ].join("\n"),
+            salidaError: "",
+            duracionMs: 10,
+            timeoutVencido: false,
+          };
+        }
+        return {
+          codigoSalida: 0,
+          salidaEstandar: "",
+          salidaError: "",
+          duracionMs: 0,
+          timeoutVencido: false,
+        };
+      },
+    };
+
+    const entorno = { ...entornoReal(), ejecutor: ejecutorMock };
+    const { chequeos } = await ejecutarChequeos(entorno, {
+      repoDir,
+      configPath,
+      simulado: false,
+    });
+
+    const chequeoHerramienta = chequeos.find((c) => c.nombre === "herramienta");
+    expect(chequeoHerramienta).toBeDefined();
+    expect(chequeoHerramienta?.estado).toBe("error");
+    expect(chequeoHerramienta?.detalle).toContain("modelo-inexistente-xyz");
+  });
 });
+

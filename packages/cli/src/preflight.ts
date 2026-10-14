@@ -19,6 +19,23 @@ export interface OpcionesPreflight {
   simulado: boolean;
 }
 
+/** Extrae la lista de identificadores de modelos a partir de la salida de 'agy models'. */
+export function parsearModelosAgy(salida: string): string[] {
+  const lineas = salida.split(/\r?\n/);
+  const modelos: string[] = [];
+  for (const l of lineas) {
+    const trimmed = l.trim();
+    if (!trimmed || trimmed.toLowerCase().startsWith("fetching")) {
+      continue;
+    }
+    const partes = trimmed.split(/\s+/);
+    if (partes[0]) {
+      modelos.push(partes[0]);
+    }
+  }
+  return modelos;
+}
+
 /**
  * Comprueba el entorno sin gastar nada: repositorio, Git, árbol (sin contar
  * `.batuta/`), referencia base, configuración, herramienta de agentes (solo
@@ -107,6 +124,7 @@ export async function ejecutarChequeos(
   }
 
   const tipoRunner = resolverTipoRunner(config);
+
   if (!opciones.simulado && tipoRunner === "antigravity") {
     try {
       const binPath = config.runner?.bin_path ?? "agy";
@@ -114,12 +132,43 @@ export async function ejecutarChequeos(
         timeoutMs: 15_000,
       });
       if (res.codigoSalida === 0) {
-        chequeos.push({
-          nombre: "herramienta",
-          estado: "correcto",
-          detalle: `Antigravity CLI (${binPath}) disponible y autenticado.`,
-        });
-      } else {
+        const modelosDisponibles = parsearModelosAgy(res.salidaEstandar);
+        const aliasUsados = new Set([
+          config.modelos.scout,
+          config.modelos.resumenes,
+          config.modelos.architect,
+          config.modelos["software-engineer"].baja,
+          config.modelos["software-engineer"].media,
+          config.modelos["software-engineer"].alta,
+          config.modelos.debugger,
+          config.modelos.revisores,
+        ]);
+        const modelosConfigurados = Array.from(
+          new Set(
+            Array.from(aliasUsados).map(
+              (alias) => config.alias_modelos[alias]?.modelo ?? alias,
+            ),
+          ),
+        );
+        const modelosFaltantes = modelosConfigurados.filter(
+          (m) => !modelosDisponibles.includes(m),
+        );
+
+        if (modelosFaltantes.length > 0) {
+          chequeos.push({
+            nombre: "herramienta",
+            estado: "error",
+            detalle: `Antigravity CLI disponible, pero los siguientes modelos configurados no están disponibles en el catálogo de agy: ${modelosFaltantes.join(", ")}. Modelos disponibles: ${modelosDisponibles.join(", ")}.`,
+          });
+        } else {
+          chequeos.push({
+            nombre: "herramienta",
+            estado: "correcto",
+            detalle: `Antigravity CLI (${binPath}) disponible y autenticado. Modelos verificados: ${modelosConfigurados.join(", ")}.`,
+          });
+        }
+      }
+ else {
         chequeos.push({
           nombre: "herramienta",
           estado: "error",
@@ -133,7 +182,8 @@ export async function ejecutarChequeos(
         detalle: `No se encontró el ejecutable de Antigravity (${config.runner?.bin_path ?? "agy"}).`,
       });
     }
-  } else if (!opciones.simulado && tipoRunner === "claude-code") {
+  }
+ else if (!opciones.simulado && tipoRunner === "claude-code") {
     const preflight = await verificarPreflightClaudeCode(entorno.ejecutor);
     if (!preflight.ok) {
       chequeos.push({
