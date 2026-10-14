@@ -200,6 +200,14 @@ export class MotorFlujo {
           pregunta: progreso.esperaEntrada?.pregunta ?? "",
         };
       }
+      if (estado.estado === "WAITING_QUOTA") {
+        return {
+          resultado: "pausa-cuota",
+          runId,
+          resetTime: progreso.pausaCuota?.resetTime,
+          bucketIds: progreso.pausaCuota?.bucketIds,
+        };
+      }
 
       // Si un documento aprobado cambió, pide aprobar de nuevo (sección 4).
       const recheck = await revisarHashes(this.deps, dirBatuta, runId, progreso);
@@ -223,6 +231,14 @@ export class MotorFlujo {
         }
         case "esperar-entrada": {
           return { resultado: "pausa-entrada", runId, pregunta: paso.pregunta };
+        }
+        case "esperar-cuota": {
+          return {
+            resultado: "pausa-cuota",
+            runId,
+            resetTime: paso.resetTime,
+            bucketIds: paso.bucketIds,
+          };
         }
         case "solicitar-aprobacion": {
           await solicitarAprobacion(this.deps, dirBatuta, runId, config, paso.puerta);
@@ -365,6 +381,15 @@ export class MotorFlujo {
       await this.deps.store.agregar(runId, {
         tipo: "reintento_programado",
         payload: { interrumpido: true, motivo: "reanudacion sin contar intento" },
+      });
+    }
+    if (estado.estado === "WAITING_QUOTA") {
+      const retomarEn = progreso.pausaCuota?.retomarEn ?? "IMPLEMENT";
+      progreso.pausaCuota = undefined;
+      await guardarProgreso(this.deps.fs, dirBatuta, runId, progreso);
+      await this.deps.store.agregar(runId, {
+        tipo: "ejecucion_reanudada",
+        payload: { retomar_en: retomarEn, motivo: "reanudacion de cuota" },
       });
     }
     return this.continuarCon(dirBatuta, runId);

@@ -20,6 +20,7 @@ export interface ArgsDoctor {
   configPath?: string;
   base?: string;
   simulado?: string;
+  skipModelCheck?: boolean;
   debug: boolean;
 }
 
@@ -34,6 +35,7 @@ export async function ejecutarDoctor(
       configPath: rutaConfig(repoDir, args.configPath),
       refBase: args.base,
       simulado: args.simulado !== undefined,
+      skipModelCheck: args.skipModelCheck === true,
     });
     const hayErrores = chequeos.some((c: Chequeo) => c.estado === "error");
     return {

@@ -36,6 +36,7 @@ export {
   loadBatutaConfig,
   parseBatutaConfig,
   parseBatutaConfigYaml,
+  resolverTipoRunner,
 } from "./config.js";
 export type { BatutaConfig, Gate } from "./config.js";
 export {
@@ -76,6 +77,7 @@ export {
   AprobacionPayloadSchema,
   EntradaRecibidaPayloadSchema,
   LimitePayloadSchema,
+  PausaCuotaPayloadSchema,
   applyEvent,
   esEstadoTerminal,
   estadoInicial,
@@ -86,6 +88,7 @@ export type {
   AprobacionPayload,
   EntradaRecibidaPayload,
   LimitePayload,
+  PausaCuotaPayload,
 } from "./reducer.js";
 export {
   dirCheckpoints,
@@ -168,6 +171,7 @@ export {
   parsearLineasAnadidasDiff,
   parsearNumstatZ,
   parsearWorktreesPorcelain,
+  resolverDirectorioWorktrees,
   VERSION_MINIMA_GIT,
 } from "./git.js";
 export type {
@@ -211,7 +215,17 @@ export type {
   ResultadoMotor,
 } from "./motorTipos.js";
 export { siguientePaso, progresoInicial } from "./motorDecision.js";
-export { construirPrompt, describirSubtarea } from "./motorPrompts.js";
+export {
+  construirPrompt,
+  construirPromptCortoAgy,
+  describirSubtarea,
+} from "./motorPrompts.js";
+export type { RutasContextoAgy } from "./motorPrompts.js";
+export { escribirContextoEnWorktree } from "./motorContexto.js";
+export type {
+  ContextoArchivosWorktree,
+  ResultadoContextoArchivos,
+} from "./motorContexto.js";
 export {
   comprobarLimites,
   emitirAdvertenciaCostos,
@@ -268,3 +282,34 @@ export type {
   PermisosRol,
   UsoAgente,
 } from "./agentRunner.js";
+export {
+  AntigravityRunner,
+  construirEntornoSesionAgy,
+  esWorktreeValido,
+  LIMITE_LONGITUD_PROMPT_AGY,
+  obtenerVariablesSesionAgy,
+  sanitizarTaskIdParaArchivo,
+  VARIABLES_ENTORNO_AGY,
+} from "./antigravityRunner.js";
+export type {
+  AntigravityRunnerConfig,
+  AntigravityRunnerDeps,
+} from "./antigravityRunner.js";
+export {
+  BucketUsoSchema,
+  CuotaManager,
+  DatosUsoSchema,
+  evaluarCuota,
+  GrupoUsoSchema,
+  obtenerBucketsParaModelo,
+  parsearRespuestaUso,
+  RespuestaUsageAgySchema,
+} from "./cuotaManager.js";
+export type {
+  BucketUso,
+  DatosUso,
+  EvaluacionCuota,
+  GrupoUso,
+  RespuestaUsageAgy,
+} from "./cuotaManager.js";
+

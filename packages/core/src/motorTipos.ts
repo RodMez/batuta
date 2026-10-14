@@ -29,6 +29,7 @@ export interface DependenciasMotor {
 export type ResultadoMotor =
   | { resultado: "pausa-aprobacion"; runId: string; puerta: Puerta }
   | { resultado: "pausa-entrada"; runId: string; pregunta: string }
+  | { resultado: "pausa-cuota"; runId: string; resetTime?: string | null; bucketIds?: string[] }
   | { resultado: "terminada"; runId: string }
   | { resultado: "fallida"; runId: string; motivo: string }
   | { resultado: "abortada"; runId: string };
@@ -80,6 +81,7 @@ export interface ProgresoMotor {
   gatesFallidosGlobal: string[];
   motivoFallo?: string;
   esperaEntrada?: { pregunta: string; subtareaId: string };
+  pausaCuota?: { resetTime?: string | null; bucketIds?: string[]; modelo?: string; retomarEn?: import("./state.js").RunStatus };
   worktree: {
     ruta: string;
     rama: string;
@@ -97,4 +99,5 @@ export type PasoSiguiente =
   | { paso: "generar-cierre" }
   | { paso: "esperar-aprobacion"; puerta: Puerta }
   | { paso: "esperar-entrada"; pregunta: string }
+  | { paso: "esperar-cuota"; resetTime?: string | null; bucketIds?: string[] }
   | { paso: "terminada"; estado: "DONE" | "FAILED" | "ABORTED" };

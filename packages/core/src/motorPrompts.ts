@@ -37,3 +37,43 @@ export async function construirPrompt(
   }
   return prompt;
 }
+
+export interface RutasContextoAgy {
+  specRel: string;
+  planRel: string;
+  feedbackRel?: string;
+  reglasRepoRel?: string;
+}
+
+/**
+ * Construye un prompt corto (<500 caracteres en uso típico, siempre <4000)
+ * para agy conforme a la Decisión 6 de ADR 021.
+ * En lugar de incrustar specs gigantes, planes completos y esquemas en el flag -p,
+ * referencia los archivos depositados en .batuta/contexto/ dentro del worktree.
+ */
+export function construirPromptCortoAgy(
+  rol: AgentRole,
+  subtarea: Subtask,
+  rutas: RutasContextoAgy,
+): string {
+  const tituloUnaLinea = subtarea.titulo.replace(/[\r\n]+/g, " ").trim().slice(0, 200);
+  const maxArchivos = 20;
+  const archivosVisibles = subtarea.archivos.slice(0, maxArchivos);
+  const restantes = subtarea.archivos.length - archivosVisibles.length;
+  const archivos =
+    archivosVisibles.join(", ") +
+    (restantes > 0 ? ` …(+${restantes} más)` : "");
+  const lineas = [
+    `Rol: ${rol}. Tarea: ${subtarea.id} - ${tituloUnaLinea}.`,
+    `Permitidos: ${archivos}.`,
+    `Contexto:`,
+    `- Spec: "${rutas.specRel}"`,
+    `- Plan: "${rutas.planRel}" (ver subtarea "${subtarea.id}")`,
+    rutas.feedbackRel ? `- Feedback: "${rutas.feedbackRel}"` : "",
+    rutas.reglasRepoRel ? `- Reglas: "${rutas.reglasRepoRel}"` : "",
+    `Restriccion de sandbox: No ejecutes comandos de terminal ni pruebas por tu cuenta (la terminal esta deshabilitada en sandbox; el motor ejecutara los gates).`,
+    `Instrucción: Solo toca permitidos y responde según esquema.`,
+  ].filter(Boolean);
+
+  return lineas.join("\n");
+}

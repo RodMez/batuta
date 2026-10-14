@@ -1,0 +1,44 @@
+# Configuración de la primera ejecución real de Batuta con tu proxy local (Jan).
+# En Jan, la integración de Claude Code asigna Opus, Sonnet y Haiku al modelo remoto
+# models/gemini-3.8-flash, así que el agente real es ese modelo, dirigido por la CLI de Claude Code.
+# Este proxy no informa de los tokens de entrada, así que el límite de tokens cuenta poco:
+# los frenos que de verdad protegen son los minutos, los pasos por agente y los timeouts.
+proyecto: .
+preparacion: []
+entorno_gates: {}
+ejecutor: claude-code
+# Variables del entorno que se reenvían al agente (solo los nombres):
+variables_modelo: [ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL]
+# Sin precios: es acceso por suscripción, así que Batuta limitará por tokens y minutos.
+alias_modelos:
+  rapido:  { modelo: "models/gemini-3.8-flash", ventana: 200000 }
+  medio:   { modelo: "models/gemini-3.8-flash", ventana: 200000 }
+  fuerte:  { modelo: "models/gemini-3.8-flash", ventana: 200000 }
+  revisor: { modelo: "models/gemini-3.8-flash", ventana: 200000 }
+modelos:
+  scout: rapido
+  resumenes: rapido
+  architect: fuerte
+  software-engineer: { baja: rapido, media: medio, alta: fuerte }
+  debugger: fuerte
+  revisores: revisor
+limites:
+  intentos_por_subtarea: 2
+  tokens_por_ejecucion: 200000
+  minutos_por_ejecucion: 15
+  lineas_de_diff_max: 100
+  usd_por_agente: 0.5
+  pasos_por_agente: 12
+  timeout_comando_seg: 60
+  preguntas_bloqueantes: 1
+  continuaciones_por_subtarea: 1
+  timeout_preparacion_seg: 60
+aprobaciones:
+  H0_inicio: true
+  H1_spec: true
+  H2_plan: true
+  H3_merge: true
+gates:
+  - { nombre: pruebas, comando: "node --test", timeout_seg: 60 }
+rutas_prohibidas:
+  - ".env*"

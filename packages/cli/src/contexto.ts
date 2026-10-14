@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
+  AntigravityRunner,
   ClaudeCodeRunner,
   EjecutorComandosReal,
   ModuloGitReal,
@@ -11,6 +12,7 @@ import {
   parseBatutaConfigYaml,
   parseGuionJson,
   relojSistema,
+  resolverTipoRunner,
   sistemaArchivosNode,
   RunStore,
   type AgentRunner,
@@ -139,7 +141,31 @@ export function crearRunner(
   desde = 0,
 ): AgentRunner {
   if (guion) return new RunnerGuionado(guion, desde);
-  return new ClaudeCodeRunner(entorno.ejecutor, config);
+  const tipo = resolverTipoRunner(config);
+  if (tipo === "antigravity") {
+    const preciosModelos: Record<string, { entrada?: number; salida?: number }> = {};
+    for (const [alias, info] of Object.entries(config.alias_modelos)) {
+      preciosModelos[alias] = { entrada: info.entrada, salida: info.salida };
+      preciosModelos[info.modelo] = { entrada: info.entrada, salida: info.salida };
+    }
+    return new AntigravityRunner(
+      {
+        binPath: config.runner?.bin_path ?? "agy",
+        timeoutMs: (config.runner?.timeout_seg ?? 300) * 1000,
+        umbralCuota: config.runner?.umbral_cuota ?? 0.05,
+        preciosModelos,
+      },
+      {
+        ejecutor: entorno.ejecutor,
+      },
+    );
+  }
+  if (tipo === "claude-code") {
+    return new ClaudeCodeRunner(entorno.ejecutor, config);
+  }
+  throw new Error(
+    `Runner "${tipo}" no soportado en este hito (usa "claude-code" o "antigravity").`,
+  );
 }
 
 export interface DepsEjecucion {

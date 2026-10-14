@@ -304,6 +304,24 @@ export function parsearWorktreesPorcelain(salidaPorcelain: string): WorktreeList
 }
 
 /**
+ * Calcula el directorio padre donde crearWorktree aloja los runs.
+ * - Si directorioWorktrees está definido: absoluto tal cual, relativo contra el repo.
+ * - Si no: resolve(dirname(repo), basename(repo) + '-worktrees').
+ */
+export function resolverDirectorioWorktrees(
+  directorioRepo: string,
+  directorioWorktrees?: string,
+): string {
+  const repoAbs = resolve(directorioRepo);
+  if (directorioWorktrees) {
+    return isAbsolute(directorioWorktrees)
+      ? resolve(directorioWorktrees)
+      : resolve(repoAbs, directorioWorktrees);
+  }
+  return resolve(dirname(repoAbs), `${basename(repoAbs)}-worktrees`);
+}
+
+/**
  * Implementación real de `ModuloGit` sobre el ejecutable `git` usando `EjecutorComandos`.
  */
 export class ModuloGitReal implements ModuloGit {
@@ -491,13 +509,12 @@ export class ModuloGitReal implements ModuloGit {
     // Calcular la ruta del worktree
     let dirWorktree: string;
     if (opciones?.directorioWorktrees) {
-      dirWorktree = isAbsolute(opciones.directorioWorktrees)
-        ? resolve(opciones.directorioWorktrees, runId)
-        : resolve(repoAbs, opciones.directorioWorktrees, runId);
+      dirWorktree = resolve(
+        resolverDirectorioWorktrees(repoAbs, opciones.directorioWorktrees),
+        runId,
+      );
     } else {
-      const dirPadre = dirname(repoAbs);
-      const nombreRepo = basename(repoAbs);
-      dirWorktree = resolve(dirPadre, `${nombreRepo}-worktrees`, runId);
+      dirWorktree = resolve(resolverDirectorioWorktrees(repoAbs), runId);
     }
 
     if (existsSync(dirWorktree)) {

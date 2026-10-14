@@ -94,6 +94,8 @@ export const EVENTO_AVISO_VALUES = [
   "fallo",
   "ejecucion_terminada",
   "costo_cerca_del_limite",
+  "pausa_cuota",
+  "config_invalida",
 ] as const;
 
 /** Notificaciones por Telegram (secciones 7 y 15). */
@@ -102,7 +104,39 @@ export const NotificacionesSchema = z.strictObject({
   eventos: z.array(z.enum(EVENTO_AVISO_VALUES)).min(1),
 });
 
-export const EJECUTOR_VALUES = ["claude-code", "opencode"] as const;
+export const EJECUTOR_VALUES = [
+  "claude-code",
+  "opencode",
+  "antigravity",
+] as const;
+
+export const RUNNER_TIPOS = [
+  "antigravity",
+  "claude-code",
+  "opencode",
+] as const;
+
+export const RunnerTipoSchema = z.enum(RUNNER_TIPOS);
+export type RunnerTipo = z.infer<typeof RunnerTipoSchema>;
+
+export const RunnerConfigSchema = z.strictObject({
+  tipo: RunnerTipoSchema.default("antigravity"),
+  bin_path: z.string().min(1).default("agy"),
+  timeout_seg: z.number().positive().default(300),
+  umbral_cuota: z.number().min(0).max(1).default(0.05),
+  sandbox: z.literal(true).default(true),
+});
+
+export type RunnerConfig = z.infer<typeof RunnerConfigSchema>;
+
+/** @deprecated Ya no se usa como default (runner es optional); se conserva por compatibilidad de imports. */
+export const DEFAULT_RUNNER: RunnerConfig = {
+  tipo: "antigravity",
+  bin_path: "agy",
+  timeout_seg: 300,
+  umbral_cuota: 0.05,
+  sandbox: true,
+};
 
 const DEFAULT_ALIAS_MODELOS: Record<
   string,
@@ -184,6 +218,8 @@ const DEFAULT_NOTIFICACIONES: {
     | "fallo"
     | "ejecucion_terminada"
     | "costo_cerca_del_limite"
+    | "pausa_cuota"
+    | "config_invalida"
   )[];
 } = {
   canal: "telegram",
@@ -193,6 +229,8 @@ const DEFAULT_NOTIFICACIONES: {
     "fallo",
     "ejecucion_terminada",
     "costo_cerca_del_limite",
+    "pausa_cuota",
+    "config_invalida",
   ],
 };
 
@@ -211,6 +249,7 @@ export const BatutaConfigSchema = z
     preparacion: z.array(z.string().min(1)).default([]),
     entorno_gates: z.record(z.string(), z.string()).default({}),
     ejecutor: z.enum(EJECUTOR_VALUES).default("claude-code"),
+    runner: RunnerConfigSchema.optional(),
     alias_modelos: z
       .record(z.string(), ModeloPrecioSchema)
       .default(DEFAULT_ALIAS_MODELOS),
@@ -315,4 +354,16 @@ export function parseBatutaConfigYaml(yamlText: string): BatutaConfig {
 export async function loadBatutaConfig(filePath: string): Promise<BatutaConfig> {
   const text = await readFile(filePath, "utf8");
   return parseBatutaConfigYaml(text);
+}
+
+/**
+ * Resuelve el tipo de runner efectivo:
+ * Si se definió explícitamente `runner.tipo`, prevalece.
+ * En caso contrario, se deriva de `config.ejecutor` (por defecto "claude-code").
+ */
+export function resolverTipoRunner(config: BatutaConfig): RunnerTipo {
+  if (config.runner?.tipo) {
+    return config.runner.tipo;
+  }
+  return config.ejecutor;
 }

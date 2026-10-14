@@ -22,8 +22,10 @@ Batuta es un orquestador de agentes de IA. `docs/diseno.md` es el diseño del pr
 
 - Antes de codificar, lee el brief y las secciones del diseño que cite. Si te ayuda, escribe una spec corta del hito en `docs/specs/`.
 - Trabaja en la rama `hito/NN-nombre`, con commits pequeños y Conventional Commits.
+- Un commit por unidad lógica con sus tests; nunca mezclar esquema, módulo, integración al motor y CLI en un mismo commit; si un commit pasa de ~300 líneas, detenerse y dividirlo antes de continuar.
 - No hagas push ni merge salvo que el usuario lo pida.
 - Puedes agregar dependencias si las justificas en el registro de decisiones. Prefiere pocas y bien mantenidas.
+
 
 ## Pautas técnicas iniciales
 

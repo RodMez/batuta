@@ -26,6 +26,7 @@ export const MotivoFalloAgenteSchema = z.enum([
   "salida_invalida",
   "error_herramienta",
   "error_proceso",
+  "cuota_agotada",
 ]);
 
 export type MotivoFalloAgente = z.infer<typeof MotivoFalloAgenteSchema>;
@@ -70,6 +71,7 @@ export interface AgentCallContext {
   promptSistema?: string;
   runId?: string;
   directorioLogs?: string;
+  raizWorktrees?: string;
 }
 
 /** Resultado estructurado devuelto por un AgentRunner. */
@@ -83,6 +85,8 @@ export interface AgentRunResult {
   duracionMs: number;
   rutaLog: string;
   reintentos: number;
+  resetTime?: string | null;
+  bucketsBajoUmbral?: string[];
 }
 
 /** Interfaz inyectable común a todo runner de agentes. */

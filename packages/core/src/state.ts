@@ -23,6 +23,7 @@ export const RUN_STATUSES = [
   "FAILED",
   "ABORTED",
   "WAITING_INPUT",
+  "WAITING_QUOTA",
   "AWAITING_APPROVAL",
 ] as const;
 

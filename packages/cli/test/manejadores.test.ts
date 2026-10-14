@@ -2,7 +2,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  AntigravityRunner,
+  ClaudeCodeRunner,
   EjecutorComandosReal,
+  parseBatutaConfigYaml,
   type EjecutorComandos,
   type ResultadoComando,
 } from "@batuta/core";
@@ -14,7 +17,8 @@ import { ejecutarResume } from "../src/comandos/resume.js";
 import { ejecutarRun } from "../src/comandos/run.js";
 import { asegurarExclusionBatuta } from "../src/comandos/run.js";
 import { ejecutarStatus, StatusJsonSchema } from "../src/comandos/status.js";
-import { entornoReal } from "../src/contexto.js";
+import { crearRunner, entornoReal } from "../src/contexto.js";
+import { ejecutarChequeos, parsearModelosAgy } from "../src/preflight.js";
 import { CONFIG_DEMO, PLAN_UNA, crearRepoDesechable, guionEscribe } from "./utilidades.js";
 
 const CONFIG_LIBRE = [
@@ -362,4 +366,275 @@ describe("manejadores de la CLI", () => {
     expect(res.codigo).toBe(2);
     expect(res.texto).toMatch(/--spec/);
   }, 60000);
+
+  it("crearRunner preserva compatibilidad hacia atrás instanciando ClaudeCodeRunner si no hay sección runner", () => {
+    const entorno = entornoReal();
+    const configClaude = parseBatutaConfigYaml(
+      [
+        "proyecto: .",
+        "ejecutor: claude-code",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+    );
+    const runnerClaude = crearRunner(entorno, configClaude);
+    expect(runnerClaude).toBeInstanceOf(ClaudeCodeRunner);
+
+    const configAgy = parseBatutaConfigYaml(
+      [
+        "proyecto: .",
+        "runner:",
+        "  tipo: antigravity",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+    );
+    const runnerAgy = crearRunner(entorno, configAgy);
+    expect(runnerAgy).toBeInstanceOf(AntigravityRunner);
+  });
+
+  it("crearRunner lanza error explícito con ejecutor opencode (B1)", () => {
+    const entorno = entornoReal();
+    const configOpencode = parseBatutaConfigYaml(
+      [
+        "proyecto: .",
+        "ejecutor: opencode",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+    );
+    expect(() => crearRunner(entorno, configOpencode)).toThrow(/no soportado/);
+  });
+
+  it("parsearModelosAgy extrae identificadores de modelo ignorando lineas de carga", () => {
+    const salidaEjemplo = [
+      "Fetching available models...",
+      "gemini-3.8-flash-high\tGemini 3.8 Flash (High)",
+      "gemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)",
+      "gemini-3.8-flash-low\tGemini 3.8 Flash (Low)",
+      "claude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)",
+    ].join("\n");
+
+    const modelos = parsearModelosAgy(salidaEjemplo);
+    expect(modelos).toEqual([
+      "gemini-3.8-flash-high",
+      "gemini-3.8-flash-medium",
+      "gemini-3.8-flash-low",
+      "claude-sonnet-4-6",
+    ]);
+  });
+
+  it("parsearModelosAgy ignora cabeceras, BOM, duplicados y vacíos (M5)", () => {
+    const salida = [
+      "MODEL\tDESCRIPTION",
+      "---",
+      "gemini-3.8-flash-low\tLow",
+      "gemini-3.8-flash-low\tLow duplicado",
+      "",
+      "Fetching available models...",
+      "[2Jgemini-3.8-flash-high\tHigh",
+    ].join("\n");
+    expect(parsearModelosAgy(salida)).toEqual([
+      "gemini-3.8-flash-low",
+      "gemini-3.8-flash-high",
+    ]);
+    expect(parsearModelosAgy("")).toEqual([]);
+  });
+
+  it("preflight con runner antigravity valida que los modelos configurados existan en agy models", async () => {
+    const { repoDir, limpiar } = await crearRepoDesechable();
+    limpiezas.push(limpiar);
+
+    const configPath = join(repoDir, "batuta.yaml");
+    await writeFile(
+      configPath,
+      [
+        "proyecto: .",
+        "runner:",
+        "  tipo: antigravity",
+        "alias_modelos:",
+        "  rapido: { modelo: gemini-3.8-flash-low, ventana: 100000 }",
+        "  medio: { modelo: gemini-3.8-flash-medium, ventana: 100000 }",
+        "  fuerte: { modelo: modelo-inexistente-xyz, ventana: 200000 }",
+        "  revisor: { modelo: gemini-3.8-flash-low, ventana: 100000 }",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+      "utf8",
+    );
+    await confirmarTodo(repoDir);
+
+
+    const ejecutorMock: EjecutorComandos = {
+      ejecutar: async () => {
+        throw new Error("No debe llamar");
+      },
+      ejecutarArgs: async (bin, args) => {
+        if (bin === "agy" && args[0] === "models") {
+          return {
+            codigoSalida: 0,
+            salidaEstandar: [
+              "Fetching available models...",
+              "gemini-3.8-flash-high\tGemini 3.8 Flash (High)",
+              "gemini-3.8-flash-low\tGemini 3.8 Flash (Low)",
+            ].join("\n"),
+            salidaError: "",
+            duracionMs: 10,
+            timeoutVencido: false,
+          };
+        }
+        return {
+          codigoSalida: 0,
+          salidaEstandar: "",
+          salidaError: "",
+          duracionMs: 0,
+          timeoutVencido: false,
+        };
+      },
+    };
+
+    const entorno = { ...entornoReal(), ejecutor: ejecutorMock };
+    const { chequeos } = await ejecutarChequeos(entorno, {
+      repoDir,
+      configPath,
+      simulado: false,
+    });
+
+    const chequeoHerramienta = chequeos.find((c) => c.nombre === "herramienta");
+    expect(chequeoHerramienta).toBeDefined();
+    expect(chequeoHerramienta?.estado).toBe("error");
+    expect(chequeoHerramienta?.detalle).toContain("modelo-inexistente-xyz");
+  });
+
+  it("preflight antigravity pasa entornoExtra de sesión a agy models (A-03)", async () => {
+    const { repoDir, limpiar } = await crearRepoDesechable();
+    limpiezas.push(limpiar);
+    const configPath = join(repoDir, "batuta.yaml");
+    await writeFile(
+      configPath,
+      [
+        "proyecto: .",
+        "runner:",
+        "  tipo: antigravity",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+      "utf8",
+    );
+    await confirmarTodo(repoDir);
+    let entornoCapturado: Record<string, string> | undefined;
+    const ejecutorMock: EjecutorComandos = {
+      ejecutar: async () => {
+        throw new Error("No debe llamar");
+      },
+      ejecutarArgs: async (_bin, _args, opciones) => {
+        entornoCapturado = opciones?.entornoExtra;
+        return {
+          codigoSalida: 0,
+          salidaEstandar: "gemini-3.8-flash-low\tLow",
+          salidaError: "",
+          duracionMs: 10,
+          timeoutVencido: false,
+        };
+      },
+    };
+    const entorno = { ...entornoReal(), ejecutor: ejecutorMock };
+    await ejecutarChequeos(entorno, { repoDir, configPath, simulado: false });
+    expect(entornoCapturado).toBeDefined();
+  });
+
+  it("preflight --skip-model-check convierte modelo faltante en aviso", async () => {
+    const { repoDir, limpiar } = await crearRepoDesechable();
+    limpiezas.push(limpiar);
+    const configPath = join(repoDir, "batuta.yaml");
+    await writeFile(
+      configPath,
+      [
+        "proyecto: .",
+        "runner:",
+        "  tipo: antigravity",
+        "alias_modelos:",
+        "  rapido: { modelo: gemini-3.8-flash-low, ventana: 100000 }",
+        "  medio: { modelo: gemini-3.8-flash-medium, ventana: 100000 }",
+        "  fuerte: { modelo: modelo-inexistente-xyz, ventana: 200000 }",
+        "  revisor: { modelo: gemini-3.8-flash-low, ventana: 100000 }",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+      "utf8",
+    );
+    await confirmarTodo(repoDir);
+    const ejecutorMock: EjecutorComandos = {
+      ejecutar: async () => {
+        throw new Error("No debe llamar");
+      },
+      ejecutarArgs: async () => ({
+        codigoSalida: 0,
+        salidaEstandar: "gemini-3.8-flash-low\tLow",
+        salidaError: "",
+        duracionMs: 10,
+        timeoutVencido: false,
+      }),
+    };
+    const entorno = { ...entornoReal(), ejecutor: ejecutorMock };
+    const { chequeos } = await ejecutarChequeos(entorno, {
+      repoDir,
+      configPath,
+      simulado: false,
+      skipModelCheck: true,
+    });
+    const h = chequeos.find((c) => c.nombre === "herramienta");
+    expect(h?.estado).toBe("aviso");
+    expect(h?.detalle).toContain("modelo-inexistente-xyz");
+  });
+
+  it("preflight con runner opencode devuelve error explícito (B1)", async () => {
+    const { repoDir, limpiar } = await crearRepoDesechable();
+    limpiezas.push(limpiar);
+    const configPath = join(repoDir, "batuta.yaml");
+    await writeFile(
+      configPath,
+      [
+        "proyecto: .",
+        "ejecutor: opencode",
+        "gates:",
+        "  - { nombre: ok, comando: 'node -v', timeout_seg: 10 }",
+      ].join("\n"),
+      "utf8",
+    );
+    await confirmarTodo(repoDir);
+    const { chequeos } = await ejecutarChequeos(entornoReal(), {
+      repoDir,
+      configPath,
+      simulado: false,
+    });
+    const h = chequeos.find((c) => c.nombre === "herramienta");
+    expect(h?.estado).toBe("error");
+    expect(h?.detalle).toMatch(/opencode.*no soportado/);
+  });
+
+  it("status muestra reinicio estimado cuando hay pausa por cuota (G-03)", async () => {
+    const { repoDir, limpiar } = await crearRepoDesechable();
+    limpiezas.push(limpiar);
+    const entorno = entornoReal();
+    const dirBatuta = join(repoDir, ".batuta");
+    const { RunStore } = await import("@batuta/core");
+    const { crearRelojFijo } = await import("../../core/test/helpers.js");
+    const store = new RunStore(dirBatuta, entorno.fs, crearRelojFijo("2026-10-14T00:00:00Z"));
+    const runId = await store.iniciarEjecucion();
+    await store.agregar(runId, {
+      tipo: "ejecucion_pausada_por_cuota",
+      payload: { reset_time: "2026-10-15T05:00:00Z", buckets_bajo_umbral: [], retomar_en: "IMPLEMENT" },
+    });
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(dirBatuta, "runs", runId), { recursive: true });
+    await writeFile(
+      join(dirBatuta, "runs", runId, "motor.json"),
+      JSON.stringify({ pausaCuota: { resetTime: "2026-10-15T05:00:00Z", bucketIds: [], modelo: "m" } }),
+      "utf8",
+    );
+    const st = await ejecutarStatus({ runId, repoDir, json: false, debug: false }, entorno);
+    expect(st.texto).toContain("Cuota en espera: reinicio estimado 2026-10-15T05:00:00Z");
+  });
 });
+

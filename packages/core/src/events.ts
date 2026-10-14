@@ -28,6 +28,7 @@ export const EVENT_TYPES = [
   "entrada_requerida",
   "entrada_recibida",
   "ejecucion_reanudada",
+  "ejecucion_pausada_por_cuota",
   "contexto_resumido",
   "advertencia",
   "ejecucion_completada",

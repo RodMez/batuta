@@ -5,3 +5,7 @@ coverage/
 .DS_Store
 .batuta/
 *.tsbuildinfo
+batuta-contexto/
+auditoria-batuta.txt
+auditoria-completa.txt
+correciones.py

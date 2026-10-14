@@ -192,5 +192,59 @@ describe("Política de diff (CA-8)", () => {
     expect(normalizarRutaDiff("src\\components\\App.tsx")).toBe("src/components/App.tsx");
     expect(normalizarRutaDiff(".\\src\\index.ts")).toBe("src/index.ts");
     expect(normalizarRutaDiff("/src/style.css")).toBe("src/style.css");
+    expect(normalizarRutaDiff("src//a/./b.ts")).toBe("src/a/b.ts");
+    expect(normalizarRutaDiff(".batuta\\contexto\\spec.md")).toBe(".batuta/contexto/spec.md");
+  });
+
+  it("no excluye escapes .batuta/contexto/../ fuera del contexto", () => {
+    const cambios: CambioArchivo[] = [
+      { ruta: ".batuta/contexto/../config.yaml", lineasAnadidas: 1, lineasEliminadas: 0 },
+    ];
+    const v = evaluarDiff(cambios, { archivosPermitidos: ["src/app.ts"] });
+    expect(v.some((x) => x.archivo === ".batuta/contexto/../config.yaml")).toBe(true);
+  });
+
+  it("excluye estrictamente .batuta/contexto/ pero evalúa otros cambios en .batuta/", () => {
+    const cambios: CambioArchivo[] = [
+      {
+        ruta: ".batuta/contexto/spec.md",
+        lineasAnadidas: 50,
+        lineasEliminadas: 0,
+      },
+      {
+        ruta: ".batuta/contexto/plan.json",
+        lineasAnadidas: 20,
+        lineasEliminadas: 0,
+      },
+      {
+        ruta: "src/app.ts",
+        lineasAnadidas: 5,
+        lineasEliminadas: 0,
+      },
+    ];
+
+    // Con lista de archivos permitidos solo para src/app.ts
+    const violaciones = evaluarDiff(cambios, {
+      archivosPermitidos: ["src/app.ts"],
+      maxLineasDiff: 10,
+    });
+
+    // .batuta/contexto/ no debe generar violaciones de archivos permitidos ni sumar al límite de líneas
+    expect(violaciones).toHaveLength(0);
+
+    // En cambio, otro archivo fuera de contexto sí es evaluado
+    const cambiosConOtroEnBatuta: CambioArchivo[] = [
+      {
+        ruta: ".batuta/config-extra.yaml",
+        lineasAnadidas: 5,
+        lineasEliminadas: 0,
+      },
+    ];
+    const violacionesBatutaExtra = evaluarDiff(cambiosConOtroEnBatuta, {
+      archivosPermitidos: ["src/app.ts"],
+    });
+    expect(violacionesBatutaExtra).toHaveLength(1);
+    expect(violacionesBatutaExtra[0].tipo).toBe("archivo_no_permitido");
   });
 });
+

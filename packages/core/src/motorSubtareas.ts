@@ -1,9 +1,15 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import {
+  esWorktreeValido,
+  LIMITE_LONGITUD_PROMPT_AGY,
+} from "./antigravityRunner.js";
+import { resolverDirectorioWorktrees } from "./git.js";
 import type { AgentRole } from "./agentContract.js";
 import type { AgentInput } from "./agentContract.js";
 import type { AgentCallContext } from "./agentRunner.js";
 import { calcularCostoEstimado } from "./agentRunner.js";
 import type { BatutaConfig } from "./config.js";
+import { resolverTipoRunner } from "./config.js";
 import type { CambioArchivo } from "./diffPolicy.js";
 import { evaluarDiff } from "./diffPolicy.js";
 import type { ResultadoGate } from "./gatesRunner.js";
@@ -15,7 +21,8 @@ import {
 } from "./informeFallo.js";
 import { dirInformes, guardarProgreso, leerProgreso, leerReglasRepo, rutaPlan, rutaSpec } from "./motorRutas.js";
 import { comprobarLimites, emitirAdvertenciaCostos, fallarEjecucion, registrarUso } from "./motorLimites.js";
-import { construirPrompt } from "./motorPrompts.js";
+import { construirPrompt, construirPromptCortoAgy } from "./motorPrompts.js";
+import { escribirContextoEnWorktree } from "./motorContexto.js";
 import type {
   DependenciasMotor,
   ProgresoMotor,
@@ -105,17 +112,104 @@ export async function ejecutarSubtarea(
       intento: rol === "software-engineer" ? intentoNumero : 1,
       config,
     });
+    const worktreeRuta = progreso.worktree?.ruta;
+    if (!worktreeRuta) {
+      throw new Error(`Sin worktree para ${runId}`);
+    }
+
     const ultimoInforme =
       sub.informes.length > 0 ? sub.informes[sub.informes.length - 1]! : "";
-    const prompt = await construirPrompt(
-      rol,
-      subtarea,
-      spec,
-      reglasRepo,
-      ultimoInforme,
-      sub.ultimaRespuesta,
-      continuacionResumen ?? undefined,
+
+    const tipoRunner = resolverTipoRunner(config);
+    // Raíz unificada con git.ts: mismo cálculo que crearWorktree.
+    const raizWorktrees = resolverDirectorioWorktrees(
+      dirname(dirBatuta),
+      config.directorio_worktrees,
     );
+
+    // Contexto en archivos solo para antigravity (ADR 021 Dec. 6): evita I/O
+    // inútil en claude-code y archivos feedback/AGENTS obsoletos entre intentos.
+    let contextoArchivos: {
+      specRutaRel: string;
+      planRutaRel: string;
+      feedbackRutaRel?: string;
+      reglasRepoRutaRel?: string;
+      dirContexto: string;
+    } | null = null;
+    if (tipoRunner === "antigravity") {
+      // Validar antes de escribir (H-A2): no crear archivos fuera del worktree.
+      if (!esWorktreeValido(worktreeRuta, raizWorktrees)) {
+        throw new Error(
+          `Seguridad: worktree no válido "${worktreeRuta}" para la raíz "${raizWorktrees}"`,
+        );
+      }
+      contextoArchivos = await escribirContextoEnWorktree(
+        deps.fs,
+        worktreeRuta,
+        {
+          spec,
+          plan,
+          subtarea,
+          reglasRepo,
+          ultimoInforme,
+          ultimaRespuesta: sub.ultimaRespuesta,
+          continuacionResumen: continuacionResumen
+            ? `${continuacionResumen.resumen}\n${continuacionResumen.notas}`
+            : undefined,
+        },
+      );
+      // Limpiar archivos obsoletos del intento anterior si esta vez no tocan.
+      if (!contextoArchivos.feedbackRutaRel) {
+        try {
+          await deps.fs.borrar(join(contextoArchivos.dirContexto, "feedback.md"));
+        } catch {
+          // Tolerar ENOENT: puede no existir.
+        }
+      }
+      if (!contextoArchivos.reglasRepoRutaRel) {
+        try {
+          await deps.fs.borrar(join(contextoArchivos.dirContexto, "AGENTS.md"));
+        } catch {
+          // Tolerar ENOENT.
+        }
+      }
+    }
+
+    let prompt: string;
+    if (tipoRunner === "antigravity" && contextoArchivos) {
+      prompt = construirPromptCortoAgy(rol, subtarea, {
+        specRel: contextoArchivos.specRutaRel,
+        planRel: contextoArchivos.planRutaRel,
+        feedbackRel: contextoArchivos.feedbackRutaRel,
+        reglasRepoRel: contextoArchivos.reglasRepoRutaRel,
+      });
+    } else {
+      prompt = await construirPrompt(
+        rol,
+        subtarea,
+        spec,
+        reglasRepo,
+        ultimoInforme,
+        sub.ultimaRespuesta,
+        continuacionResumen ?? undefined,
+      );
+    }
+
+    // Falla rápido sin reintentos si el prompt supera el límite de agy (M2):
+    // reintentar con el mismo prompt determinista desperdicia cuota y git.
+    if (
+      tipoRunner === "antigravity" &&
+      prompt.length > LIMITE_LONGITUD_PROMPT_AGY
+    ) {
+      return fallarEjecucion(
+        deps,
+        dirBatuta,
+        runId,
+        progreso,
+        `Prompt para agy demasiado largo (${prompt.length} > ${LIMITE_LONGITUD_PROMPT_AGY}). Reduce archivos o títulos.`,
+      );
+    }
+
     const input: AgentInput = {
       task_id: subtarea.id,
       agent_role: rol,
@@ -124,10 +218,11 @@ export async function ejecutarSubtarea(
       budget_limit_usd: config.limites.usd_por_agente,
       max_steps: config.limites.pasos_por_agente,
     };
-    const worktreeRuta = progreso.worktree?.ruta;
-    if (!worktreeRuta) {
-      throw new Error(`Sin worktree para ${runId}`);
-    }
+
+    const timeoutMs =
+      tipoRunner === "antigravity" && config.runner?.timeout_seg !== undefined
+        ? config.runner.timeout_seg * 1000
+        : config.limites.timeout_comando_seg * 1000;
     const contexto: AgentCallContext = {
       directorioTrabajo: worktreeRuta,
       rol,
@@ -136,13 +231,14 @@ export async function ejecutarSubtarea(
       limites: {
         budgetLimitUsd: config.limites.usd_por_agente,
         maxSteps: config.limites.pasos_por_agente,
-        timeoutMs: config.limites.timeout_comando_seg * 1000,
+        timeoutMs,
       },
       permisos: { soloLectura: false, comandosPermitidos: [] },
       entorno: {},
       prompt,
       runId,
       directorioLogs: join(dirRun(dirBatuta, runId), "logs"),
+      raizWorktrees,
     };
 
     if (estado.estado !== "IMPLEMENT") {
@@ -156,6 +252,44 @@ export async function ejecutarSubtarea(
 
     // La llamada puede lanzar (interrupción simulada): no cuenta como intento.
     const resultado = await deps.runner.ejecutar(input, contexto);
+    // Pausa por cuota antes de registrar uso: la llamada no se ejecutó (0 tokens),
+    // no debe ensuciar modelos/roles ni emitir advertencia de costos.
+    if (!resultado.exito && resultado.motivoFallo === "cuota_agotada") {
+      const resetTime = resultado.resetTime ?? null;
+      const bucketIds = resultado.bucketsBajoUmbral ?? [];
+      progreso.pausaCuota = { resetTime, bucketIds, modelo: decision.modelo, retomarEn: "IMPLEMENT" };
+      await guardarProgreso(deps.fs, dirBatuta, runId, progreso);
+      await deps.store.agregar(runId, {
+        tipo: "ejecucion_pausada_por_cuota",
+        payload: {
+          reset_time: resetTime,
+          buckets_bajo_umbral: bucketIds,
+          modelo: decision.modelo,
+          retomar_en: "IMPLEMENT",
+        },
+      });
+      await deps.store.agregar(runId, {
+        tipo: "advertencia",
+        paso: subtarea.id,
+        payload: {
+          aviso: "pausa_cuota",
+          modelo: decision.modelo,
+          reset_time: resetTime,
+          buckets_bajo_umbral: bucketIds,
+        },
+      });
+      await deps.notificador.notificar({
+        tipo: "pausa_cuota",
+        runId,
+        mensaje: `Cuota agotada para ${decision.modelo} (${bucketIds.join(", ")}). Reanuda con: batuta resume ${runId}${resetTime ? ` (reset: ${resetTime})` : ""}`,
+      });
+      return {
+        resultado: "pausa-cuota",
+        runId,
+        resetTime,
+        bucketIds,
+      };
+    }
     const tokens = resultado.uso.tokensEntrada + resultado.uso.tokensSalida;
     const precios = config.alias_modelos[decision.alias];
     const costo = calcularCostoEstimado(

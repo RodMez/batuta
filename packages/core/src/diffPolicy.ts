@@ -29,9 +29,11 @@ export interface ViolacionDiff {
   mensaje: string;
 }
 
+import { posix } from "node:path";
+
 /**
- * Normaliza una ruta convirtiendo separadores de Windows `\` a `/`
- * y eliminando prefijos `./` o `/`.
+ * Normaliza una ruta convirtiendo separadores de Windows `\` a `/`,
+ * colapsando `//`, `/./` y segmentos `..`, y eliminando prefijos `./` o `/`.
  */
 export function normalizarRutaDiff(ruta: string): string {
   let normal = ruta.replace(/\\/g, "/");
@@ -40,6 +42,11 @@ export function normalizarRutaDiff(ruta: string): string {
   }
   if (normal.startsWith("/")) {
     normal = normal.slice(1);
+  }
+  normal = posix.normalize(normal);
+  if (normal === ".") return "";
+  while (normal.startsWith("./")) {
+    normal = normal.slice(2);
   }
   return normal;
 }
@@ -238,6 +245,15 @@ export function evaluarDiff(
 
   for (const cambio of cambios) {
     const rutaNorm = normalizarRutaDiff(cambio.ruta);
+
+    // .batuta/contexto/ queda excluido del diff (ADR 021, Decisión 6)
+    if (
+      rutaNorm.startsWith(".batuta/contexto/") ||
+      rutaNorm === ".batuta/contexto"
+    ) {
+      continue;
+    }
+
     totalLineasDiff += cambio.lineasAnadidas + cambio.lineasEliminadas;
 
     // 1. Comprobar rutas prohibidas
