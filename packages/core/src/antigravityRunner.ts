@@ -29,20 +29,22 @@ import { formatZodError } from "./validation.js";
 /** Límite de seguridad de longitud para el prompt pasado por -p (evita límite de ~32k en Windows). */
 export const LIMITE_LONGITUD_PROMPT_AGY = 4000;
 
-/** Variables de entorno adicionales permitidas exclusivamente para agy. */
-export const VARIABLES_ENTORNO_AGY: readonly string[] = [
-  "USERPROFILE",
-  "UserProfile",
-  "userprofile",
-  "APPDATA",
-  "AppData",
-  "appdata",
-  "LOCALAPPDATA",
-  "LocalAppData",
-  "localappdata",
-  "HOME",
-  "home",
-];
+/**
+ * Devuelve las variables de sesión requeridas por agy según la plataforma del SO (ADR 021, Decisión 4).
+ * - En Windows ('win32'): USERPROFILE, APPDATA, LOCALAPPDATA
+ * - En Linux / macOS: HOME
+ */
+export function obtenerVariablesSesionAgy(
+  plataforma: NodeJS.Platform = process.platform,
+): readonly string[] {
+  if (plataforma === "win32") {
+    return ["USERPROFILE", "APPDATA", "LOCALAPPDATA"];
+  }
+  return ["HOME"];
+}
+
+/** Variables de entorno adicionales permitidas para agy (por defecto en Windows, para compatibilidad). */
+export const VARIABLES_ENTORNO_AGY: readonly string[] = obtenerVariablesSesionAgy("win32");
 
 /** Configuración inyectable para AntigravityRunner. */
 export interface AntigravityRunnerConfig {
@@ -51,6 +53,7 @@ export interface AntigravityRunnerConfig {
   umbralCuota?: number;
   validarRutaWorktree?: boolean;
   raizWorktrees?: string;
+  plataforma?: NodeJS.Platform;
 }
 
 /** Dependencias inyectables para pruebas y personalización. */
@@ -114,6 +117,7 @@ export class AntigravityRunner implements AgentRunner {
   private umbralCuota: number;
   private validarWorktree: boolean;
   private raizWorktrees?: string;
+  private plataforma: NodeJS.Platform;
   private ejecutor: EjecutorComandos;
   private cuotaManager: CuotaManager;
 
@@ -126,6 +130,7 @@ export class AntigravityRunner implements AgentRunner {
     this.umbralCuota = config?.umbralCuota ?? 0.05;
     this.validarWorktree = config?.validarRutaWorktree ?? true;
     this.raizWorktrees = config?.raizWorktrees;
+    this.plataforma = config?.plataforma ?? process.platform;
     this.ejecutor = deps?.ejecutor ?? new EjecutorComandosReal();
     this.cuotaManager =
       deps?.cuotaManager ??
@@ -252,9 +257,9 @@ export class AntigravityRunner implements AgentRunner {
           "--sandbox",
         ];
 
-        // Construir entorno con variables limpias + variables OAuth de agy
+        // Construir entorno con variables limpias + variables OAuth de agy según plataforma
         const entornoExtra: Record<string, string> = {};
-        for (const clave of VARIABLES_ENTORNO_AGY) {
+        for (const clave of obtenerVariablesSesionAgy(this.plataforma)) {
           if (process.env[clave] !== undefined) {
             entornoExtra[clave] = process.env[clave]!;
           }
@@ -272,8 +277,8 @@ export class AntigravityRunner implements AgentRunner {
         });
       };
 
-      // Primer intento
-      let resultadoCmd = await ejecutarIntento(contexto.prompt);
+      // Invocación única al agente (el reintento corresponde al motor de flujo, no al runner)
+      const resultadoCmd = await ejecutarIntento(contexto.prompt);
 
       // Comprobar si el timeout venció
       if (resultadoCmd.timeoutVencido) {
@@ -290,11 +295,11 @@ export class AntigravityRunner implements AgentRunner {
           modeloEfectivo: contexto.modelo,
           duracionMs: Date.now() - inicio,
           rutaLog,
-          reintentos,
+          reintentos: 0,
         };
       }
 
-      // Si el código de salida fue no-cero, evaluar cuota reactiva
+      // Si el código de salida fue no-cero, evaluar cuota reactiva y errores del sandbox
       if (resultadoCmd.codigoSalida !== 0) {
         let evaluacionReactiva: EvaluacionCuota | null = null;
         try {
@@ -323,13 +328,33 @@ export class AntigravityRunner implements AgentRunner {
             modeloEfectivo: contexto.modelo,
             duracionMs: Date.now() - inicio,
             rutaLog,
-            reintentos,
+            reintentos: 0,
             resetTime: evaluacionReactiva.resetTimeMasTardio,
             bucketsBajoUmbral: evaluacionReactiva.bucketsBajoUmbral.map((b) => b.id),
           };
         }
 
-        // Si no fue cuota, es un error del proceso
+        // Distinguir error del sandbox de terminal (ADR 021, Sección 6.3)
+        const salidaCombinada = `${resultadoCmd.salidaError}\n${resultadoCmd.salidaEstandar}`;
+        if (salidaCombinada.includes("connecting to sandbox server: EOF")) {
+          await this.guardarLog(
+            rutaLog,
+            `[ERROR SANDBOX TERMINAL] El subproceso agy falló al intentar ejecutar terminal bloqueada por el sandbox (connecting to sandbox server: EOF).\nStderr: ${resultadoCmd.salidaError}`,
+          );
+          return {
+            exito: false,
+            output: null,
+            motivoFallo: "error_herramienta",
+            uso: { tokensEntrada: 0, tokensSalida: 0, turnos: 0 },
+            costoEstimado: { montoUsd: null, desconocido: true },
+            modeloEfectivo: contexto.modelo,
+            duracionMs: Date.now() - inicio,
+            rutaLog,
+            reintentos: 0,
+          };
+        }
+
+        // Si no fue cuota ni sandbox, es un error general del proceso
         await this.guardarLog(
           rutaLog,
           `[ERROR PROCESO] Código de salida ${resultadoCmd.codigoSalida}.\nStderr: ${resultadoCmd.salidaError}\nStdout: ${resultadoCmd.salidaEstandar}`,
@@ -343,49 +368,12 @@ export class AntigravityRunner implements AgentRunner {
           modeloEfectivo: contexto.modelo,
           duracionMs: Date.now() - inicio,
           rutaLog,
-          reintentos,
+          reintentos: 0,
         };
       }
 
       // Parsear e interpretar salida JSON
-      let interpretacion = this.interpretarSalidaAgy(resultadoCmd.salidaEstandar);
-
-      // Si falló por salida inválida, reintentar una sola vez con retroalimentación Zod
-      if (interpretacion.motivoFallo === "salida_invalida" && interpretacion.errorValidacion) {
-        reintentos = 1;
-        const promptReintento = `${contexto.prompt}\n\n[REINTENTO POR SALIDA INVÁLIDA]\nLa salida devuelta no cumplió con el esquema requerido:\n${interpretacion.errorValidacion}\nPor favor, responde estrictamente con el JSON de AgentOutput válido.`;
-
-        resultadoCmd = await ejecutarIntento(promptReintento);
-
-        if (resultadoCmd.timeoutVencido) {
-          await this.guardarLog(
-            rutaLog,
-            `[TIMEOUT EN REINTENTO] Vencido tras ${Date.now() - inicio} ms.\nStderr: ${resultadoCmd.salidaError}`,
-          );
-          return {
-            exito: false,
-            output: null,
-            motivoFallo: "timeout",
-            uso: interpretacion.uso,
-            costoEstimado: this.calcularCosto(interpretacion.uso, contexto),
-            modeloEfectivo: contexto.modelo,
-            duracionMs: Date.now() - inicio,
-            rutaLog,
-            reintentos,
-          };
-        }
-
-        if (resultadoCmd.codigoSalida === 0) {
-          interpretacion = this.interpretarSalidaAgy(resultadoCmd.salidaEstandar);
-        } else {
-          interpretacion = {
-            exito: false,
-            agentOutput: null,
-            motivoFallo: "error_proceso",
-            uso: interpretacion.uso,
-          };
-        }
-      }
+      const interpretacion = this.interpretarSalidaAgy(resultadoCmd.salidaEstandar);
 
       // Control del límite de pasos (turnos) si se definieron
       const maxSteps = contexto.limites?.maxSteps;

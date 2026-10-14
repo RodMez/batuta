@@ -6,6 +6,7 @@ import {
   AntigravityRunner,
   esWorktreeValido,
   LIMITE_LONGITUD_PROMPT_AGY,
+  obtenerVariablesSesionAgy,
   construirPromptCortoAgy,
   escribirContextoEnWorktree,
   sistemaArchivosNode,
@@ -398,28 +399,16 @@ describe("AntigravityRunner (Hito 8 - ADR 021)", () => {
     expect(res.motivoFallo).toBe("timeout");
   });
 
-  it("reintenta una sola vez ante salida inválida y devuelve éxito si el segundo intento es válido", async () => {
-    let intento = 0;
+  it("no reintenta internamente ante salida inválida y devuelve salida_invalida (responsabilidad del motor)", async () => {
+    let llamadas = 0;
     const ejecutorMock: EjecutorComandos = {
       ejecutarArgs: async () => {
-        intento++;
-        if (intento === 1) {
-          return {
-            codigoSalida: 0,
-            salidaEstandar: JSON.stringify({
-              status: "SUCCESS",
-              structured_output: { status: "INVALIDO" }, // status inválido
-            }),
-            salidaError: "",
-            duracionMs: 100,
-            timeoutVencido: false,
-          };
-        }
+        llamadas++;
         return {
           codigoSalida: 0,
           salidaEstandar: JSON.stringify({
             status: "SUCCESS",
-            structured_output: OUTPUT_VALIDO,
+            structured_output: { status: "INVALIDO" }, // status inválido según esquema
           }),
           salidaError: "",
           duracionMs: 100,
@@ -446,9 +435,152 @@ describe("AntigravityRunner (Hito 8 - ADR 021)", () => {
 
     const res = await runner.ejecutar(INPUT_TEST, CONTEXTO_TEST);
 
-    expect(intento).toBe(2);
-    expect(res.reintentos).toBe(1);
-    expect(res.exito).toBe(true);
-    expect(res.output).toEqual(OUTPUT_VALIDO);
+    expect(llamadas).toBe(1);
+    expect(res.reintentos).toBe(0);
+    expect(res.exito).toBe(false);
+    expect(res.motivoFallo).toBe("salida_invalida");
+  });
+
+  it("detecta el error de terminal bloqueada por sandbox EOF y devuelve error_herramienta", async () => {
+    const ejecutorMock: EjecutorComandos = {
+      ejecutarArgs: async () => ({
+        codigoSalida: 1,
+        salidaEstandar: "",
+        salidaError: "Error during tool call: connecting to sandbox server: EOF",
+        duracionMs: 150,
+        timeoutVencido: false,
+      }),
+      ejecutar: async () => {
+        throw new Error("No debe llamar");
+      },
+    };
+
+    const cuotaManagerMock = {
+      verificarCuotaModelo: async () => ({
+        suficiente: true,
+        bucketsBajoUmbral: [],
+        resetTimeMasTardio: null,
+      }),
+    } as unknown as CuotaManager;
+
+    const runner = new AntigravityRunner(
+      { validarRutaWorktree: false },
+      { ejecutor: ejecutorMock, cuotaManager: cuotaManagerMock },
+    );
+
+    const res = await runner.ejecutar(INPUT_TEST, CONTEXTO_TEST);
+
+    expect(res.exito).toBe(false);
+    expect(res.motivoFallo).toBe("error_herramienta");
+    expect(res.output).toBeNull();
+  });
+
+  it("mapea variables de sesión requeridas por plataforma (ADR 021)", () => {
+    const varsWindows = obtenerVariablesSesionAgy("win32");
+    expect(varsWindows).toEqual(["USERPROFILE", "APPDATA", "LOCALAPPDATA"]);
+
+    const varsLinux = obtenerVariablesSesionAgy("linux");
+    expect(varsLinux).toEqual(["HOME"]);
+
+    const varsDarwin = obtenerVariablesSesionAgy("darwin");
+    expect(varsDarwin).toEqual(["HOME"]);
+  });
+
+  it("pasa variables de entorno según la plataforma configurada en el runner", async () => {
+    let entornoCapturado: Record<string, string> | undefined;
+
+    const ejecutorMock: EjecutorComandos = {
+      ejecutarArgs: async (_cmd, _args, opciones) => {
+        entornoCapturado = opciones?.entornoExtra;
+        return {
+          codigoSalida: 0,
+          salidaEstandar: JSON.stringify({
+            status: "SUCCESS",
+            structured_output: OUTPUT_VALIDO,
+          }),
+          salidaError: "",
+          duracionMs: 50,
+          timeoutVencido: false,
+        };
+      },
+      ejecutar: async () => {
+        throw new Error("No debe llamar");
+      },
+    };
+
+    const cuotaManagerMock = {
+      verificarCuotaModelo: async () => ({
+        suficiente: true,
+        bucketsBajoUmbral: [],
+        resetTimeMasTardio: null,
+      }),
+    } as unknown as CuotaManager;
+
+    // En plataforma linux solo debe incluir HOME de entre las variables de sesión agy
+    const runnerLinux = new AntigravityRunner(
+      { validarRutaWorktree: false, plataforma: "linux" },
+      { ejecutor: ejecutorMock, cuotaManager: cuotaManagerMock },
+    );
+
+    await runnerLinux.ejecutar(INPUT_TEST, CONTEXTO_TEST);
+
+    expect(entornoCapturado).toBeDefined();
+    expect(entornoCapturado?.USERPROFILE).toBeUndefined();
+    expect(entornoCapturado?.APPDATA).toBeUndefined();
+  });
+
+  it("construye los argumentos con --sandbox, --output-format json, --json-schema y -p", async () => {
+    let ejecutableLlamado = "";
+    let argsLlamados: readonly string[] = [];
+
+    const ejecutorMock: EjecutorComandos = {
+      ejecutarArgs: async (ejecutable, args) => {
+        ejecutableLlamado = ejecutable;
+        argsLlamados = args;
+        return {
+          codigoSalida: 0,
+          salidaEstandar: JSON.stringify({
+            status: "SUCCESS",
+            structured_output: OUTPUT_VALIDO,
+          }),
+          salidaError: "",
+          duracionMs: 50,
+          timeoutVencido: false,
+        };
+      },
+      ejecutar: async () => {
+        throw new Error("No debe llamar");
+      },
+    };
+
+    const cuotaManagerMock = {
+      verificarCuotaModelo: async () => ({
+        suficiente: true,
+        bucketsBajoUmbral: [],
+        resetTimeMasTardio: null,
+      }),
+    } as unknown as CuotaManager;
+
+    const runner = new AntigravityRunner(
+      { binPath: "agy-custom", validarRutaWorktree: false },
+      { ejecutor: ejecutorMock, cuotaManager: cuotaManagerMock },
+    );
+
+    await runner.ejecutar(INPUT_TEST, {
+      ...CONTEXTO_TEST,
+      modelo: "gemini-3.8-flash-low",
+      prompt: "Mi prompt de prueba",
+    });
+
+    expect(ejecutableLlamado).toBe("agy-custom");
+    expect(argsLlamados).toContain("--sandbox");
+    expect(argsLlamados).not.toContain("--dangerously-skip-permissions");
+    expect(argsLlamados).toContain("--output-format");
+    expect(argsLlamados).toContain("json");
+    expect(argsLlamados).toContain("--model");
+    expect(argsLlamados).toContain("gemini-3.8-flash-low");
+    expect(argsLlamados).toContain("-p");
+    expect(argsLlamados).toContain("Mi prompt de prueba");
   });
 });
+
